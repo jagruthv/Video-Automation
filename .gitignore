@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Runtime
+pids/
+*.pid
+*.seed
+*.pid.lock
+logs/
+*.log
+
+# Build
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PM2
+.pm2/
+
+# Temp
+/tmp/
+*.tmp
+
+# Backup
+*.backup
+*.bak
+*.tar.gz
+*.zip
+
+# Kokoro model cache (large)
+.kokoro-cache/
+
+# Wrangler
+.wrangler/
