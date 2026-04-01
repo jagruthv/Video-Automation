@@ -22,10 +22,10 @@ const logger = winston.createLogger({
         : winston.format.combine(
             winston.format.colorize(),
             winston.format.timestamp({ format: 'HH:mm:ss' }),
-            winston.format.printf(({ timestamp, level, message, module, ...rest }) => {
-              const mod = module ? ` [${module}]` : '';
-              const extra = Object.keys(rest).length > 1 ? ` ${JSON.stringify(rest)}` : '';
-              return `${timestamp} ${level}${mod}: ${message}${extra}`;
+            winston.format.printf(({ timestamp, level, message, module: mod, service, ...rest }) => {
+              const modStr = mod ? ` [${mod}]` : '';
+              const extra = Object.keys(rest).length > 0 ? ` ${JSON.stringify(rest)}` : '';
+              return `${timestamp} ${level}${modStr}: ${message}${extra}`;
             })
           )
     })
@@ -33,21 +33,12 @@ const logger = winston.createLogger({
 });
 
 /**
- * Creates a child logger with a fixed module name.
- * @param {string} moduleName - The module name for log context
- * @returns {winston.Logger}
- */
-logger.child = function (moduleName) {
-  return logger.child ? winston.createLogger({
-    ...logger,
-    defaultMeta: { ...logger.defaultMeta, module: moduleName }
-  }) : logger;
-};
-
-/**
  * Get a module-scoped logger.
+ * Returns an object with info/warn/error/debug methods
+ * that automatically tag logs with the module name.
+ *
  * @param {string} moduleName
- * @returns {Object} Logger with module context
+ * @returns {{ info: Function, warn: Function, error: Function, debug: Function }}
  */
 function getModuleLogger(moduleName) {
   const wrap = (level) => (message, meta = {}) => {

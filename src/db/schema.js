@@ -13,6 +13,9 @@ const VideoRecordSchema = new Schema({
   platform: { type: String, required: true, enum: ['youtube', 'instagram', 'x', 'tiktok'] },
   topic: { type: String, required: true },
   topicHash: { type: String, required: true, index: true },
+  // scriptJson is stored temporarily for debugging/reprocessing.
+  // A scheduled job (scripts/strip-old-scripts.js) sets this to null
+  // after 60 days to keep MongoDB Atlas 512MB free tier under control.
   scriptJson: { type: Schema.Types.Mixed, default: null },
   audioFile: { type: String, default: null },
   videoFile: { type: String, default: null },
@@ -43,6 +46,8 @@ const VideoRecordSchema = new Schema({
 
 VideoRecordSchema.index({ accountId: 1, uploadDate: -1 });
 VideoRecordSchema.index({ accountId: 1, status: 1 });
+// Index for the scriptJson stripping job
+VideoRecordSchema.index({ createdAt: 1 }, { partialFilterExpression: { scriptJson: { $ne: null } } });
 
 // ============================================================
 // 2. TASK — manually queued video requests from dashboard

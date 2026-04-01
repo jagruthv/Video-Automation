@@ -11,6 +11,7 @@
     "dashboard:dev": "cd dashboard && npm run dev",
     "collect-metrics": "node src/modules/analytics-collector.js",
     "competitor-check": "node src/modules/anti-flag-engine.js --mode=competitor-check",
+    "strip-old-scripts": "node scripts/strip-old-scripts.js",
     "test": "jest --coverage",
     "validate-env": "node scripts/validate-env.js",
     "setup-oauth": "node scripts/setup-youtube-oauth.js"
@@ -32,7 +33,11 @@
     "jsonwebtoken": "^9.0.2",
     "helmet": "^8.0.0",
     "express-rate-limit": "^7.4.0",
-    "form-data": "^4.0.0"
+    "form-data": "^4.0.0",
+    "axios": "^1.7.0",
+    "xml-escape": "^1.1.0",
+    "fake-useragent": "^1.0.0",
+    "cross-fetch": "^4.1.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AURA Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/recharts@2.10.4/umd/Recharts.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    .tab-active { border-bottom: 3px solid #6366f1; color: #6366f1; }
+    .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .btn { padding: 8px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: #6366f1; color: white; } .btn-primary:hover { background: #4f46e5; }
+    .btn-danger { background: #ef4444; color: white; } .btn-danger:hover { background: #dc2626; }
+    .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 10px; background: #f9fafb; font-weight: 600; font-size: 0.8rem; color: #6b7280; text-transform: uppercase; }
+    td { padding: 10px; border-top: 1px solid #f3f4f6; font-size: 0.9rem; }
+    tr:hover { background: #f9fafb; }
+    input, textarea, select { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; width: 100%; }
+    .badge { padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .badge-green { background: #dcfce7; color: #15803d; }
+    .badge-red { background: #fef2f2; color: #b91c1c; }
+    .badge-yellow { background: #fefce8; color: #a16207; }
+    .badge-blue { background: #eff6ff; color: #1d4ed8; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // ========== API CLIENT ==========
+    const API_BASE = window.location.origin.includes('localhost') 
+      ? 'http://localhost:3001' 
+      : window.location.origin;
+
+    function api(path, options = {}) {
+      const token = localStorage.getItem('aura_token');
+      return fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          ...options.headers
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined
+      }).then(r => r.json());
+    }
+
+    // ========== LOGIN ==========
+    function LoginPage({ onLogin }) {
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        setError('');
+        const res = await api('/api/auth/login', { method: 'POST', body: { username, password } });
+        if (res.token) { localStorage.setItem('aura_token', res.token); onLogin(); }
+        else setError(res.error || 'Login failed');
+      };
+
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600">
+          <div className="card w-96">
+            <h1 className="text-2xl font-bold text-center mb-6">
+              <i className="fas fa-bolt text-indigo-500 mr-2"></i>AURA Dashboard
+            </h1>
+            {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-4 text-sm">{error}</div>}
+            <form onSubmit={handleLogin}>
+              <input className="mb-3" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} />
+              <input className="mb-4" type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
+              <button type="submit" className="btn btn-primary w-full">Login</button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ========== METRIC CARD ==========
+    function MetricCard({ icon, label, value, color = 'indigo' }) {
+      return (
+        <div className="card flex items-center gap-4">
+          <div className={`w-12 h-12 rounded-full bg-${color}-100 flex items-center justify-center`}>
+            <i className={`fas fa-${icon} text-${color}-600 text-lg`}></i>
+          </div>
+          <div>
+            <div className="text-2xl font-bold">{value}</div>
+            <div className="text-sm text-gray-500">{label}</div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========== OVERVIEW PAGE ==========
+    function OverviewPage() {
+      const [data, setData] = useState(null);
+      const [alerts, setAlerts] = useState([]);
+
+      useEffect(() => {
+        api('/api/dashboard/overview').then(setData);
+        api('/api/dashboard/alerts').then(d => setAlerts(d.alerts || []));
+      }, []);
+
+      if (!data) return <div className="text-center py-20 text-gray-400">Loading...</div>;
+
+      return (
+        <div>
+          <h2 className="text-xl font-bold mb-4">Overview</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+            <MetricCard icon="video" label="Videos Today" value={data.videosToday} />
+            <MetricCard icon="eye" label="Views (30d)" value={data.totalViews30d?.toLocaleString()} color="green" />
+            <MetricCard icon="chart-line" label="Avg Views" value={data.avgViewsPerVideo?.toLocaleString()} color="blue" />
+            <MetricCard icon="tower-broadcast" label="Active Channels" value={data.activeChannels} color="purple" />
+            <MetricCard icon="list-check" label="Pending Tasks" value={data.pendingTasks} color="yellow" />
+            <MetricCard icon="film" label="Total Videos (30d)" value={data.totalVideos30d} color="pink" />
+          </div>
+
+          {alerts.length > 0 && (
+            <div className="card mb-6">
+              <h3 className="font-bold mb-3"><i className="fas fa-triangle-exclamation text-yellow-500 mr-2"></i>Alerts</h3>
+              {alerts.slice(0, 5).map((a, i) => (
+                <div key={i} className="flex items-center gap-2 py-2 border-b border-gray-100 last:border-0">
+                  <span className="badge badge-red">Error</span>
+                  <span className="text-sm">{a.message}</span>
+                  <span className="text-xs text-gray-400 ml-auto">{new Date(a.time).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ========== VIDEO LOG PAGE ==========
+    function VideoLogPage() {
+      const [videos, setVideos] = useState([]);
+      const [total, setTotal] = useState(0);
+      const [page, setPage] = useState(1);
+
+      useEffect(() => {
+        api(`/api/videos?page=${page}&limit=15`).then(d => { setVideos(d.videos || []); setTotal(d.total || 0); });
+      }, [page]);
+
+      const statusBadge = (s) => {
+        const map = { uploaded: 'badge-green', failed: 'badge-red', processing: 'badge-blue', held_low_uniqueness: 'badge-yellow' };
+        return <span className={`badge ${map[s] || 'badge-blue'}`}>{s}</span>;
+      };
+
+      return (
+        <div>
+          <h2 className="text-xl font-bold mb-4">Video Log ({total} total)</h2>
+          <div className="card overflow-x-auto">
+            <table>
+              <thead><tr>
+                <th>Date</th><th>Topic</th><th>Platform</th><th>Channel</th>
+                <th>Status</th><th>Views</th><th>LLM</th><th>TTS</th><th>Score</th>
+              </tr></thead>
+              <tbody>
+                {videos.map(v => (
+                  <tr key={v._id}>
+                    <td className="text-xs whitespace-nowrap">{v.uploadDate ? new Date(v.uploadDate).toLocaleDateString() : '—'}</td>
+                    <td className="max-w-xs truncate" title={v.topic}>{v.topic?.substring(0, 50)}</td>
+                    <td><span className="badge badge-blue">{v.platform}</span></td>
+                    <td className="text-sm">{v.accountId}</td>
+                    <td>{statusBadge(v.status)}</td>
+                    <td>{v.metrics?.views?.toLocaleString() || 0}</td>
+                    <td className="text-xs">{v.llmProvider?.split('-')[0]}</td>
+                    <td className="text-xs">{v.ttsProvider}</td>
+                    <td>{v.uniquenessScore || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="flex justify-between items-center mt-4">
+              <button className="btn btn-sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
+              <span className="text-sm text-gray-500">Page {page}</span>
+              <button className="btn btn-sm" disabled={videos.length < 15} onClick={() => setPage(p => p + 1)}>Next →</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ========== TASK QUEUE PAGE ==========
+    function TaskQueuePage() {
+      const [tasks, setTasks] = useState([]);
+      const [form, setForm] = useState({ topicInstruction: '', accountId: '', verticalId: 'tech', priority: 5 });
+
+      const loadTasks = () => api('/api/tasks').then(d => setTasks(d.tasks || []));
+      useEffect(() => { loadTasks(); }, []);
+
+      const createTask = async (e) => {
+        e.preventDefault();
+        await api('/api/tasks', { method: 'POST', body: form });
+        setForm({ topicInstruction: '', accountId: '', verticalId: 'tech', priority: 5 });
+        loadTasks();
+      };
+
+      const deleteTask = async (id) => {
+        await api(`/api/tasks/${id}`, { method: 'DELETE' });
+        loadTasks();
+      };
+
+      return (
+        <div>
+          <h2 className="text-xl font-bold mb-4">Task Queue</h2>
+          <div className="card mb-6">
+            <h3 className="font-semibold mb-3">Add Task</h3>
+            <form onSubmit={createTask} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <input placeholder="Topic / instruction" value={form.topicInstruction} onChange={e => setForm({...form, topicInstruction: e.target.value})} required />
+              <input placeholder="Account ID (e.g. tech-main)" value={form.accountId} onChange={e => setForm({...form, accountId: e.target.value})} required />
+              <select value={form.verticalId} onChange={e => setForm({...form, verticalId: e.target.value})}>
+                <option value="tech">Tech</option><option value="geopolitics">Geopolitics</option>
+                <option value="history">History</option><option value="finance">Finance</option>
+                <option value="science">Science</option>
+              </select>
+              <input type="number" min="1" max="10" placeholder="Priority (1-10)" value={form.priority} onChange={e => setForm({...form, priority: parseInt(e.target.value)})} />
+              <button type="submit" className="btn btn-primary md:col-span-2">Create Task</button>
+            </form>
+          </div>
+          <div className="card">
+            <table>
+              <thead><tr><th>Topic</th><th>Account</th><th>Vertical</th><th>Priority</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody>
+                {tasks.map(t => (
+                  <tr key={t._id}>
+                    <td className="max-w-xs truncate">{t.topicInstruction}</td>
+                    <td>{t.accountId}</td>
+                    <td>{t.verticalId}</td>
+                    <td className="font-bold">{t.priority}</td>
+                    <td><span className={`badge ${t.status === 'done' ? 'badge-green' : t.status === 'failed' ? 'badge-red' : 'badge-yellow'}`}>{t.status}</span></td>
+                    <td>{t.status === 'pending' && <button className="btn btn-danger btn-sm" onClick={() => deleteTask(t._id)}>Cancel</button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // ========== CHANNELS PAGE ==========
+    function ChannelsPage() {
+      const [channels, setChannels] = useState([]);
+      useEffect(() => { api('/api/channels').then(d => setChannels(d.channels || [])); }, []);
+
+      const testAuth = async (id) => {
+        const res = await api(`/api/channels/${id}/test`, { method: 'POST' });
+        alert(res.valid ? 'Auth valid!' : `Auth failed: ${res.error || 'unknown'}`);
+      };
+
+      return (
+        <div>
+          <h2 className="text-xl font-bold mb-4">Channels</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {channels.map(ch => (
+              <div key={ch._id} className="card">
+                <div className="flex items-center gap-3 mb-3">
+                  <i className={`fab fa-${ch.platform === 'youtube' ? 'youtube text-red-500' : ch.platform === 'instagram' ? 'instagram text-pink-500' : 'twitter text-blue-500'} text-2xl`}></i>
+                  <div>
+                    <div className="font-bold">{ch.displayName || ch.accountId}</div>
+                    <div className="text-sm text-gray-500">{ch.platform} • {ch.verticalId}</div>
+                  </div>
+                  <span className={`badge ml-auto ${ch.isActive ? 'badge-green' : 'badge-red'}`}>{ch.isActive ? 'Active' : 'Inactive'}</span>
+                </div>
+                <div className="text-sm text-gray-600 mb-2">{ch.contentPersona?.substring(0, 100)}</div>
+                <div className="flex gap-2 text-xs text-gray-500">
+                  <span>Quota: {ch.quotaUsedToday || 0} used</span>
+                </div>
+                <button className="btn btn-sm btn-primary mt-3" onClick={() => testAuth(ch._id)}>Test Auth</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ========== AFFILIATES PAGE ==========
+    function AffiliatesPage() {
+      const [programs, setPrograms] = useState([]);
+      useEffect(() => { api('/api/affiliates').then(d => setPrograms(d.programs || [])); }, []);
+
+      return (
+        <div>
+          <h2 className="text-xl font-bold mb-4">Affiliate Programs</h2>
+          <div className="card">
+            <table>
+              <thead><tr><th>Program</th><th>CTA</th><th>Verticals</th><th>Frequency</th><th>Active</th></tr></thead>
+              <tbody>
+                {programs.map(p => (
+                  <tr key={p._id}>
+                    <td className="font-semibold">{p.displayName || p.programId}</td>
+                    <td className="text-sm max-w-xs truncate">{p.ctaText}</td>
+                    <td>{(p.verticals || []).map(v => <span key={v} className="badge badge-blue mr-1">{v}</span>)}</td>
+                    <td>1 in {p.injectionFrequency}</td>
+                    <td><span className={`badge ${p.isActive ? 'badge-green' : 'badge-red'}`}>{p.isActive ? 'Yes' : 'No'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // ========== SYSTEM LOGS PAGE ==========
+    function SystemLogsPage() {
+      const [logs, setLogs] = useState([]);
+      useEffect(() => { api('/api/system/logs?limit=50').then(d => setLogs(d.logs || [])); }, []);
+
+      return (
+        <div>
+          <h2 className="text-xl font-bold mb-4">System Logs</h2>
+          <div className="card overflow-x-auto">
+            <table>
+              <thead><tr><th>Time</th><th>Level</th><th>Module</th><th>Event</th><th>Details</th></tr></thead>
+              <tbody>
+                {logs.map((l, i) => (
+                  <tr key={i}>
+                    <td className="text-xs whitespace-nowrap">{new Date(l.timestamp).toLocaleString()}</td>
+                    <td><span className={`badge ${l.level === 'error' ? 'badge-red' : l.level === 'warn' ? 'badge-yellow' : 'badge-green'}`}>{l.level}</span></td>
+                    <td className="text-sm">{l.module}</td>
+                    <td className="text-sm">{l.event}</td>
+                    <td className="text-xs max-w-xs truncate">{JSON.stringify(l.payload)?.substring(0, 80)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    // ========== MAIN APP ==========
+    function App() {
+      const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem('aura_token'));
+      const [tab, setTab] = useState('overview');
+
+      if (!loggedIn) return <LoginPage onLogin={() => setLoggedIn(true)} />;
+
+      const tabs = [
+        { id: 'overview', icon: 'home', label: 'Overview' },
+        { id: 'videos', icon: 'video', label: 'Video Log' },
+        { id: 'tasks', icon: 'list-check', label: 'Task Queue' },
+        { id: 'channels', icon: 'tower-broadcast', label: 'Channels' },
+        { id: 'affiliates', icon: 'link', label: 'Affiliates' },
+        { id: 'logs', icon: 'terminal', label: 'System Logs' }
+      ];
+
+      const pages = {
+        overview: <OverviewPage />, videos: <VideoLogPage />, tasks: <TaskQueuePage />,
+        channels: <ChannelsPage />, affiliates: <AffiliatesPage />, logs: <SystemLogsPage />
+      };
+
+      return (
+        <div className="min-h-screen">
+          <header className="bg-white shadow-sm border-b">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+              <h1 className="text-lg font-bold"><i className="fas fa-bolt text-indigo-500 mr-2"></i>AURA</h1>
+              <button className="text-sm text-gray-500 hover:text-red-500" onClick={() => { localStorage.removeItem('aura_token'); setLoggedIn(false); }}>
+                <i className="fas fa-sign-out-alt mr-1"></i>Logout
+              </button>
+            </div>
+            <nav className="max-w-7xl mx-auto px-4 flex gap-4 overflow-x-auto">
+              {tabs.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  className={`py-3 px-1 text-sm font-medium whitespace-nowrap ${tab === t.id ? 'tab-active' : 'text-gray-500 hover:text-gray-700'}`}>
+                  <i className={`fas fa-${t.icon} mr-1`}></i>{t.label}
+                </button>
+              ))}
+            </nav>
+          </header>
+          <main className="max-w-7xl mx-auto px-4 py-6">
+            {pages[tab]}
+          </main>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
