@@ -1,0 +1,37 @@
+
+# ============================================================
+# AURA — Scheduled Cleanup
+# Runs weekly to strip old scriptJson blobs and purge stale data.
+# ============================================================
+name: Weekly Cleanup
+
+on:
+  schedule:
+    # Every Sunday at 03:00 UTC
+    - cron: '0 3 * * 0'
+
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Strip old scripts (>60 days)
+        run: node scripts/strip-old-scripts.js
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          NODE_ENV: production
