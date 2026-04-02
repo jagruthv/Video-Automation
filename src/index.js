@@ -89,10 +89,12 @@ async function main() {
         log.info(`Upload slot available: ${nextSlot.time.toISOString()}`);
 
         // 4. Get next video job (manual task or auto-discovery)
+        const recentTopics = channel.stats && channel.stats.recentTopics ? channel.stats.recentTopics : [];
         const job = await getNextVideoJob(
           channel.accountId,
           channel.verticalId,
-          channel.subreddits || []
+          channel.subreddits || [],
+          recentTopics
         );
 
         if (!job) {
@@ -114,7 +116,7 @@ async function main() {
 
         // 6. Generate voice audio
         log.info('Generating voice...');
-        const voiceResult = await generateVoice(script.full_script, {
+        const voiceResult = await generateVoice(script.script, {
           accountId: channel.accountId,
           outputPath: tmpManager.subpath('audio', 'voice.mp3')
         });
@@ -155,21 +157,7 @@ async function main() {
         });
 
         const uniquenessScore = await computeUniquenessScore(videoRecord);
-        log.info(`Uniqueness score: ${uniquenessScore}/100`);
-
-        const threshold = parseInt(process.env.ANTIFLAG_UNIQUENESS_THRESHOLD) || 30;
-        if (uniquenessScore < threshold) {
-          log.warn(`Uniqueness ${uniquenessScore} < threshold ${threshold} — holding video`);
-          await VideoRecord.findByIdAndUpdate(videoRecord._id, {
-            status: 'held_low_uniqueness',
-            uniquenessScore
-          });
-          if (job.source === 'manual' && job.taskId) {
-            await failTask(job.taskId, `Uniqueness score too low: ${uniquenessScore}`);
-          }
-          totalFailed++;
-          continue;
-        }
+        log.info(`Uniqueness score (Analytics only): ${uniquenessScore}/100`);
 
         // 10. Select affiliate (if applicable)
         const affiliateData = await selectAffiliateForVideo(videoRecord);
@@ -188,13 +176,22 @@ async function main() {
         const publishResult = await plugin.upload(assembly.videoPath, metadata, channel);
         log.info(`Published: ${publishResult.url} (ID: ${publishResult.platformVideoId})`);
 
-        // 12. Update video record
+        // 12. Update video record & Channel recentTopics
         await VideoRecord.findByIdAndUpdate(videoRecord._id, {
           videoId: publishResult.platformVideoId,
           status: publishResult.status || 'uploaded',
           uploadDate: new Date(),
           uniquenessScore,
           affiliateLinksUsed: affiliateData ? [affiliateData.programId] : []
+        });
+
+        await Channel.findByIdAndUpdate(channel._id, {
+          $push: {
+            'stats.recentTopics': {
+              $each: [job.topic],
+              $slice: -30
+            }
+          }
         });
 
         // 13. Mark topic as seen

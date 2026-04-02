@@ -17,7 +17,7 @@ const log = getModuleLogger('task-manager');
  * @param {string[]} customSubreddits
  * @returns {Promise<{source, topic, additionalContext?, taskId?, sourceUrl?, viralityScore?, affiliatePotential?}|null>}
  */
-async function getNextVideoJob(accountId, verticalId, customSubreddits = []) {
+async function getNextVideoJob(accountId, verticalId, customSubreddits = [], recentTopics = []) {
   // Priority 1: Check for manually created tasks
   const manualTask = await Task.findOneAndUpdate(
     {
@@ -44,7 +44,7 @@ async function getNextVideoJob(accountId, verticalId, customSubreddits = []) {
 
   // Priority 2: Auto-discover
   log.info(`No manual tasks — discovering topics for ${verticalId}...`);
-  const topics = await discoverTopics(verticalId, 15, customSubreddits);
+  const topics = await discoverTopics(verticalId, 15, customSubreddits, recentTopics);
 
   // Filter through deduplication
   for (const t of topics) {

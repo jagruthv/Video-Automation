@@ -8,6 +8,36 @@ const RssParser = require('rss-parser');
 const log = getModuleLogger('topic-intelligence');
 const rssParser = new RssParser();
 
+// ============================================================
+// FAIL-FAST UNIQUENESS GUARD
+// ============================================================
+
+/**
+ * Checks if a candidate topic is too similar to any recently used topic.
+ * Uses a simple word-overlap ratio for fast, zero-cost similarity detection.
+ * @param {string} candidate
+ * @param {string[]} recentTopics
+ * @returns {boolean} true if the topic is a duplicate / too similar
+ */
+function isDuplicateTopic(candidate, recentTopics) {
+  if (!recentTopics || recentTopics.length === 0) return false;
+  const candidateWords = new Set(
+    candidate.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 3)
+  );
+  if (candidateWords.size === 0) return false;
+
+  for (const recent of recentTopics) {
+    const recentWords = recent.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 3);
+    const overlap = recentWords.filter(w => candidateWords.has(w)).length;
+    const similarity = overlap / Math.min(candidateWords.size, recentWords.length || 1);
+    if (similarity > 0.5) {
+      log.info(`Fail-fast: topic "${candidate.substring(0, 60)}" is too similar to recent topic "${recent.substring(0, 60)}" (similarity: ${(similarity * 100).toFixed(0)}%)`);
+      return true;
+    }
+  }
+  return false;
+}
+
 const USER_AGENT = 'AURA/1.0 (Automated Content Discovery)';
 const REQUEST_TIMEOUT = 10000;
 
@@ -297,8 +327,8 @@ function scoreTopics(rawTopics) {
   });
 }
 
-async function discoverTopics(verticalId = 'tech', count = 10, customSubreddits = []) {
-  log.info(`Discovering topics for vertical: ${verticalId}, count: ${count}`);
+async function discoverTopics(verticalId = 'tech', count = 10, customSubreddits = [], recentTopics = []) {
+  log.info(`Discovering topics for vertical: ${verticalId}, count: ${count}, recent topics to exclude: ${recentTopics.length}`);
   const subreddits = customSubreddits.length > 0
     ? customSubreddits
     : (VERTICAL_SUBREDDITS[verticalId] || VERTICAL_SUBREDDITS.tech);
@@ -324,9 +354,14 @@ async function discoverTopics(verticalId = 'tech', count = 10, customSubreddits 
   if (!allRaw.length) return [];
 
   const scored = scoreTopics(allRaw);
-  const topN = scored.slice(0, count);
+
+  // FAIL-FAST: Filter out anything too similar to recentTopics BEFORE returning
+  const fresh = scored.filter(t => !isDuplicateTopic(t.topic, recentTopics));
+  log.info(`After fail-fast dedup: ${fresh.length}/${scored.length} topics remain`);
+
+  const topN = fresh.slice(0, count);
   log.info(`Top ${topN.length} topics (best: ${topN[0]?.viralityScore}/100)`);
   return topN;
 }
 
-module.exports = { discoverTopics, VERTICAL_SUBREDDITS, TRENDING_KEYWORDS, AFFILIATE_KEYWORDS };
+module.exports = { discoverTopics, isDuplicateTopic, VERTICAL_SUBREDDITS, TRENDING_KEYWORDS, AFFILIATE_KEYWORDS };
