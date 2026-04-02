@@ -157,7 +157,7 @@ async function main() {
         const uniquenessScore = await computeUniquenessScore(videoRecord);
         log.info(`Uniqueness score: ${uniquenessScore}/100`);
 
-        const threshold = parseInt(process.env.ANTIFLAG_UNIQUENESS_THRESHOLD) || 75;
+        const threshold = parseInt(process.env.ANTIFLAG_UNIQUENESS_THRESHOLD) || 30;
         if (uniquenessScore < threshold) {
           log.warn(`Uniqueness ${uniquenessScore} < threshold ${threshold} — holding video`);
           await VideoRecord.findByIdAndUpdate(videoRecord._id, {
