@@ -19,9 +19,14 @@ class YouTubePublisher extends BasePublisher {
    * Get OAuth2 client for a channel using env var names stored in credentials.
    */
   async _getAuthClient(channel) {
-    const clientId = process.env[channel.credentials.clientId];
-    const clientSecret = process.env[channel.credentials.clientSecret];
-    const refreshToken = process.env[channel.credentials.refreshToken];
+    let clientId = channel.credentials.clientId;
+    let clientSecret = channel.credentials.clientSecret;
+    let refreshToken = channel.credentials.refreshToken;
+
+    // Support both Environment Variable References (Scenario B) AND Direct Hardcoded Keys (Scenario A)
+    if (process.env[clientId]) clientId = process.env[clientId];
+    if (process.env[clientSecret]) clientSecret = process.env[clientSecret];
+    if (process.env[refreshToken]) refreshToken = process.env[refreshToken];
 
     if (!clientId || !clientSecret || !refreshToken) {
       throw new Error(`Missing YouTube credentials for ${channel.accountId}`);
