@@ -70,19 +70,19 @@ You are the Vibecoder AI Director. Output the JSON object now. No markdown. No e
  */
 function parseScriptJSON(text) {
   // Direct parse first
-  try { return JSON.parse(text); } catch {}
+  try { return JSON.parse(text); } catch { }
 
   // Try extracting from markdown code fences
   const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
   if (fenceMatch) {
-    try { return JSON.parse(fenceMatch[1]); } catch {}
+    try { return JSON.parse(fenceMatch[1]); } catch { }
   }
 
   // Try finding first { to last }
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start !== -1 && end > start) {
-    try { return JSON.parse(text.substring(start, end + 1)); } catch {}
+    try { return JSON.parse(text.substring(start, end + 1)); } catch { }
   }
 
   throw new Error('Failed to parse JSON from LLM response');
@@ -164,6 +164,30 @@ async function recordProviderResult(providerName, success) {
 
 const providers = [
   {
+    name: 'gemini-3.0-pro',
+    async generate(systemPrompt, userPrompt) {
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) throw new Error('GEMINI_API_KEY not set');
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro:generateContent?key=${key}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+            generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" }
+          }),
+          signal: AbortSignal.timeout(30000)
+        }
+      );
+      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error('No text in Gemini response');
+      return text;
+    }
+  },
+  {
     name: 'gemini-2.5-flash',
     // Corrected: 10 RPM, 250 RPD on free tier
     async generate(systemPrompt, userPrompt) {
@@ -176,7 +200,7 @@ const providers = [
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-            generationConfig: { temperature: 0.9, maxOutputTokens: 2048 }
+            generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" }
           }),
           signal: AbortSignal.timeout(30000)
         }
