@@ -38,7 +38,7 @@ function isDuplicateTopic(candidate, recentTopics) {
   return false;
 }
 
-const USER_AGENT = 'AURA/1.0 (Automated Content Discovery)';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
 const REQUEST_TIMEOUT = 10000;
 
 const TRENDING_KEYWORDS = [
