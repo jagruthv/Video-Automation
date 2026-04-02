@@ -1,0 +1,99 @@
+
+# ============================================================
+# AURA — CI / Pull Request Checks
+# Validates code quality on every push and PR.
+# ============================================================
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate env template
+        run: node scripts/validate-env.js --template-only
+
+      - name: Load-test all modules (require check)
+        run: |
+          node -e "
+            const modules = [
+              './src/utils/logger',
+              './src/utils/retry',
+              './src/utils/tmp-manager',
+              './src/utils/ssml-builder',
+              './src/db/schema',
+              './src/modules/topic-intelligence',
+              './src/modules/llm-cascade',
+              './src/modules/voice-engine',
+              './src/modules/visual-engine',
+              './src/modules/assembly-engine',
+              './src/modules/anti-flag-engine',
+              './src/modules/deduplication-guard',
+              './src/modules/affiliate-engine',
+              './src/modules/task-manager',
+              './src/modules/analytics-collector',
+              './src/modules/publisher/base-publisher',
+              './src/modules/publisher/youtube',
+              './src/modules/publisher/instagram',
+              './src/modules/publisher/tiktok',
+              './src/modules/publisher/x-twitter'
+            ];
+            let pass = 0;
+            for (const m of modules) {
+              try { require(m); pass++; console.log('OK', m); }
+              catch (e) { console.error('FAIL', m, e.message); process.exitCode = 1; }
+            }
+            console.log(\`\n\${pass}/\${modules.length} modules loaded\`);
+          "
+
+      - name: Run tests
+        run: npm test -- --passWithNoTests
+        env:
+          NODE_ENV: test
+
+  lint-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for leaked secrets
+        run: |
+          echo "Scanning for potential API key leaks..."
+          # Fail if any .js/.ts file contains a hardcoded key pattern
+          if grep -rn --include='*.js' --include='*.ts' -E '(sk-[a-zA-Z0-9]{20,}|AIza[a-zA-Z0-9_-]{35}|ghp_[a-zA-Z0-9]{36})' src/ dashboard/ scripts/ 2>/dev/null; then
+            echo "::error::Potential hardcoded API key detected!"
+            exit 1
+          fi
+          echo "No leaked secrets found."
+
+      - name: Verify .env not committed
+        run: |
+          if [ -f .env ]; then
+            echo "::error::.env file found in repository!"
+            exit 1
+          fi
+          echo ".env correctly excluded from repo."
+
+
