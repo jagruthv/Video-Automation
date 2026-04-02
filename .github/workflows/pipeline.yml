@@ -1,24 +1,16 @@
-
 # ============================================================
 # AURA — Main Video Pipeline
-# Runs 6x/day via cron, or manually from Actions tab.
-# Each run processes ONE video per active channel if a slot
-# is available, then exits.
 # ============================================================
 name: AURA Pipeline
 
 on:
   schedule:
-    # 6 runs spread across US audience peak windows (UTC times)
-    # ~08:00 ET (lunch-prep), ~10:00 ET, ~12:00 ET (lunch),
-    # ~15:00 ET, ~18:00 ET (evening), ~21:00 ET (night)
-    - cron: '0 12 * * *'   # 08:00 ET
-    - cron: '0 14 * * *'   # 10:00 ET
-    - cron: '0 16 * * *'   # 12:00 ET
-    - cron: '0 19 * * *'   # 15:00 ET
-    - cron: '0 22 * * *'   # 18:00 ET
-    - cron: '0 1 * * *'    # 21:00 ET (next UTC day)
-
+    - cron: '0 12 * * *'
+    - cron: '0 14 * * *'
+    - cron: '0 16 * * *'
+    - cron: '0 19 * * *'
+    - cron: '0 22 * * *'
+    - cron: '0 1 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
@@ -34,21 +26,24 @@ on:
 
 concurrency:
   group: aura-pipeline
-  cancel-in-progress: false   # Never cancel a running upload
+  cancel-in-progress: false
 
 jobs:
   pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 20       # Hard cap — one cycle should finish in <15 min
-
+    timeout-minutes: 20
+    env:
+      # This clears those yellow warnings and uses the latest engine
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -70,60 +65,22 @@ jobs:
       - name: Run pipeline
         run: node src/index.js
         env:
-          # === Database ===
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-
-          # === LLM Cascade ===
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           GITHUB_MODELS_TOKEN: ${{ secrets.GITHUB_MODELS_TOKEN }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-
-          # === TTS ===
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
-          # === Visuals ===
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-
-          # === YouTube ===
           YT_TECH_MAIN_CLIENT_ID: ${{ secrets.YT_TECH_MAIN_CLIENT_ID }}
           YT_TECH_MAIN_CLIENT_SECRET: ${{ secrets.YT_TECH_MAIN_CLIENT_SECRET }}
           YT_TECH_MAIN_REFRESH_TOKEN: ${{ secrets.YT_TECH_MAIN_REFRESH_TOKEN }}
-          YT_HISTORY_CLIENT_ID: ${{ secrets.YT_HISTORY_CLIENT_ID }}
-          YT_HISTORY_CLIENT_SECRET: ${{ secrets.YT_HISTORY_CLIENT_SECRET }}
-          YT_HISTORY_REFRESH_TOKEN: ${{ secrets.YT_HISTORY_REFRESH_TOKEN }}
-
-          # === Instagram ===
-          IG_TECH_MAIN_ACCESS_TOKEN: ${{ secrets.IG_TECH_MAIN_ACCESS_TOKEN }}
-          IG_TECH_MAIN_USER_ID: ${{ secrets.IG_TECH_MAIN_USER_ID }}
-          IG_HISTORY_ACCESS_TOKEN: ${{ secrets.IG_HISTORY_ACCESS_TOKEN }}
-          IG_HISTORY_USER_ID: ${{ secrets.IG_HISTORY_USER_ID }}
-
-          # === Affiliate ===
           BITLY_API_KEY: ${{ secrets.BITLY_API_KEY }}
-
-          # === Temp hosting ===
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          CF_R2_ACCOUNT_ID: ${{ secrets.CF_R2_ACCOUNT_ID }}
-          CF_R2_ACCESS_KEY_ID: ${{ secrets.CF_R2_ACCESS_KEY_ID }}
-          CF_R2_SECRET_ACCESS_KEY: ${{ secrets.CF_R2_SECRET_ACCESS_KEY }}
-          CF_R2_BUCKET_NAME: ${{ secrets.CF_R2_BUCKET_NAME }}
-          CF_R2_PUBLIC_DOMAIN: ${{ secrets.CF_R2_PUBLIC_DOMAIN }}
-
-          # === System ===
           NODE_ENV: production
           LOG_LEVEL: info
           MAX_DAILY_UPLOADS_PER_CHANNEL: '5'
-          UPLOAD_WINDOW_START_HOUR: '8'
-          UPLOAD_WINDOW_END_HOUR: '23'
-          ANTIFLAG_UNIQUENESS_THRESHOLD: '75'
-
-          # === Workflow inputs ===
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           CHANNEL_FILTER: ${{ github.event.inputs.channel_filter || '' }}
-
-
