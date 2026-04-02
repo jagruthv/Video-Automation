@@ -168,67 +168,24 @@ const providers = [
     async generate(systemPrompt, userPrompt) {
       const key = process.env.GEMINI_API_KEY;
       if (!key) throw new Error('GEMINI_API_KEY not set');
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro:generateContent?key=${key}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-            generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" }
-          }),
-          signal: AbortSignal.timeout(30000)
-        }
-      );
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-pro:generateContent?key=${key}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" } }),
+        signal: AbortSignal.timeout(30000)
+      });
       if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
       const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error('No text in Gemini response');
-      return text;
-    }
-  },
-  {
-    name: 'gemini-2.5-flash',
-    // Corrected: 10 RPM, 250 RPD on free tier
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.GEMINI_API_KEY;
-      if (!key) throw new Error('GEMINI_API_KEY not set');
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
-            generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" }
-          }),
-          signal: AbortSignal.timeout(30000)
-        }
-      );
-      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error('No text in Gemini response');
-      return text;
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text;
     }
   },
   {
     name: 'groq-llama-3.3-70b',
-    // Corrected: 30 RPM, 1,000 RPD
     async generate(systemPrompt, userPrompt) {
       const key = process.env.GROQ_API_KEY;
       if (!key) throw new Error('GROQ_API_KEY not set');
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.9, max_tokens: 2048
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
         signal: AbortSignal.timeout(30000)
       });
       if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${await res.text()}`);
@@ -237,70 +194,58 @@ const providers = [
     }
   },
   {
-    name: 'cerebras-llama-3.3-70b',
-    // Corrected: 30 RPM, 1M tokens/day
+    name: 'gemini-3.0-flash',
     async generate(systemPrompt, userPrompt) {
-      const key = process.env.CEREBRAS_API_KEY;
-      if (!key) throw new Error('CEREBRAS_API_KEY not set');
-      const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.9, max_tokens: 2048
-        }),
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) throw new Error('GEMINI_API_KEY not set');
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${key}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" } }),
         signal: AbortSignal.timeout(30000)
       });
-      if (!res.ok) throw new Error(`Cerebras HTTP ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    }
+  },
+  {
+    name: 'openrouter-deepseek-r1',
+    async generate(systemPrompt, userPrompt) {
+      const key = process.env.OPENROUTER_API_KEY;
+      if (!key) throw new Error('OPENROUTER_API_KEY not set');
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'HTTP-Referer': 'https://aura-bot.dev', 'X-Title': 'AURA' },
+        body: JSON.stringify({ model: 'deepseek/deepseek-r1:free', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
+        signal: AbortSignal.timeout(45000)
+      });
+      if (!res.ok) throw new Error(`OpenRouter HTTP ${res.status}: ${await res.text()}`);
       const data = await res.json();
       return data?.choices?.[0]?.message?.content;
     }
   },
   {
-    name: 'mistral-small',
-    // Corrected: Shared pool, variable limits — monitor usage
+    name: 'gemini-2.5-pro',
     async generate(systemPrompt, userPrompt) {
-      const key = process.env.MISTRAL_API_KEY;
-      if (!key) throw new Error('MISTRAL_API_KEY not set');
-      const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({
-          model: 'mistral-small-latest',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.9, max_tokens: 2048
-        }),
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) throw new Error('GEMINI_API_KEY not set');
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${key}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" } }),
         signal: AbortSignal.timeout(30000)
       });
-      if (!res.ok) throw new Error(`Mistral HTTP ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
       const data = await res.json();
-      return data?.choices?.[0]?.message?.content;
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text;
     }
   },
   {
     name: 'github-models-gpt4o',
-    // Corrected: 10-15 RPM, 50-150 RPD depends on plan
     async generate(systemPrompt, userPrompt) {
       const key = process.env.GITHUB_MODELS_TOKEN;
       if (!key) throw new Error('GITHUB_MODELS_TOKEN not set');
       const res = await fetch('https://models.inference.ai.azure.com/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.9, max_tokens: 2048
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
         signal: AbortSignal.timeout(30000)
       });
       if (!res.ok) throw new Error(`GitHub Models HTTP ${res.status}: ${await res.text()}`);
@@ -309,30 +254,61 @@ const providers = [
     }
   },
   {
-    name: 'openrouter-deepseek-r1',
-    // Corrected: 20 RPM, 200 RPD for free models
+    name: 'gemini-2.5-flash',
     async generate(systemPrompt, userPrompt) {
-      const key = process.env.OPENROUTER_API_KEY;
-      if (!key) throw new Error('OPENROUTER_API_KEY not set');
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${key}`,
-          'HTTP-Referer': 'https://aura-bot.dev',
-          'X-Title': 'AURA'
-        },
-        body: JSON.stringify({
-          model: 'deepseek/deepseek-r1:free',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.9, max_tokens: 2048
-        }),
-        signal: AbortSignal.timeout(45000) // DeepSeek R1 is slower (reasoning)
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) throw new Error('GEMINI_API_KEY not set');
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" } }),
+        signal: AbortSignal.timeout(30000)
       });
-      if (!res.ok) throw new Error(`OpenRouter HTTP ${res.status}: ${await res.text()}`);
+      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      return data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    }
+  },
+  {
+    name: 'cerebras-llama-3.3-70b',
+    async generate(systemPrompt, userPrompt) {
+      const key = process.env.CEREBRAS_API_KEY;
+      if (!key) throw new Error('CEREBRAS_API_KEY not set');
+      const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ model: 'llama-3.3-70b', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
+        signal: AbortSignal.timeout(30000)
+      });
+      if (!res.ok) throw new Error(`Cerebras HTTP ${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content;
+    }
+  },
+  {
+    name: 'groq-mixtral-8x7b',
+    async generate(systemPrompt, userPrompt) {
+      const key = process.env.GROQ_API_KEY;
+      if (!key) throw new Error('GROQ_API_KEY not set');
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ model: 'mixtral-8x7b-32768', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
+        signal: AbortSignal.timeout(30000)
+      });
+      if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      return data?.choices?.[0]?.message?.content;
+    }
+  },
+  {
+    name: 'mistral-small',
+    async generate(systemPrompt, userPrompt) {
+      const key = process.env.MISTRAL_API_KEY;
+      if (!key) throw new Error('MISTRAL_API_KEY not set');
+      const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ model: 'mistral-small-latest', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
+        signal: AbortSignal.timeout(30000)
+      });
+      if (!res.ok) throw new Error(`Mistral HTTP ${res.status}: ${await res.text()}`);
       const data = await res.json();
       return data?.choices?.[0]?.message?.content;
     }
