@@ -165,10 +165,20 @@ async function main() {
           log.info(`Affiliate: ${affiliateData.programId}`);
         }
 
+        // Normalize LLM output keys → publisher-expected keys
+        // LLM outputs camelCase: youtubeTitle, youtubeDescription
+        // Publisher expects snake_case: youtube_title, youtube_description, youtube_tags
+        const extractHashtags = (text = '') =>
+          (text.match(/#[A-Za-z0-9_]+/g) || []).slice(0, 15);
+
         const metadata = {
           ...script,
-          affiliateCTA: affiliateData?.ctaForDescription || '',
-          attributions: visuals.attributions || []
+          // Explicit mapping — works regardless of casing from any LLM
+          youtube_title:       script.youtubeTitle       || script.youtube_title       || `${job.topic} #shorts`,
+          youtube_description: script.youtubeDescription || script.youtube_description || '',
+          youtube_tags:        script.youtube_tags       || extractHashtags(script.youtubeDescription || script.youtube_description || ''),
+          affiliateCTA:        affiliateData?.ctaForDescription || '',
+          attributions:        visuals.attributions || []
         };
 
         // 11. Publish!
