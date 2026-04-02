@@ -4,165 +4,56 @@ const fs = require('fs');
 const path = require('path');
 const { getModuleLogger } = require('../utils/logger');
 const { withRetry } = require('../utils/retry');
-const { buildSSML, selectVoice } = require('../utils/ssml-builder');
-const { VideoRecord } = require('../db/schema');
 
 const log = getModuleLogger('voice-engine');
 
-/**
- * Get recently used voices for an account (for rotation).
- * @param {string} accountId
- * @param {number} limit
- * @returns {Promise<string[]>}
- */
-async function getRecentVoices(accountId, limit = 2) {
-  try {
-    const docs = await VideoRecord.find({ accountId, ttsVoice: { $ne: null } })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .select('ttsVoice')
-      .lean();
-    return docs.map(d => d.ttsVoice).filter(Boolean);
-  } catch { return []; }
-}
-
 // ============================================================
-// TIER 1: edge-tts (Microsoft Edge Neural Voices) — PRIMARY
-// Free, unlimited, near-human quality with SSML + word timestamps
+// NexusTTS (Cartesia)
 // ============================================================
-const edgeTTS = {
-  name: 'edge-tts',
+const nexusTTS = {
+  name: 'nexustts-cartesia',
 
-  async synthesize(scriptText, options = {}) {
-    const { EdgeTTS } = await import('edge-tts-universal');
+  async synthesize(scriptText) {
+    const key = process.env.NEXUSTTS_API_KEY;
+    if (!key) throw new Error('NEXUSTTS_API_KEY not set');
 
-    const recentVoices = options.recentVoices || [];
-    const voice = selectVoice(recentVoices);
-    log.info(`edge-tts: Using voice "${voice}"`);
+    // Remove [PAUSE_0.5s] markers and newline characters just in case it breaks speech flow incorrectly
+    // Wait, the API might handle newlines gracefully. We leave them for pacing as requested by user.
+    const cleanText = scriptText.replace(/\[PAUSE_[\d.]+s\]/g, '');
 
-    const wordTimestamps = [];
-    let audioBuffer;
-
-    try {
-      // edge-tts-universal 1.4+ synthesize API
-      const tts = new EdgeTTS(scriptText, voice);
-      const result = await tts.synthesize();
-      audioBuffer = Buffer.from(await result.audio.arrayBuffer());
-
-      // Extract word boundaries array (now called subtitle)
-      if (result.subtitle && Array.isArray(result.subtitle)) {
-        for (const wb of result.subtitle) {
-          wordTimestamps.push({
-            word: wb.text,
-            startMs: Math.round(wb.offset / 10000),
-            endMs: Math.round((wb.offset + wb.duration) / 10000)
-          });
-        }
-      }
-    } catch (err) {
-      log.warn(`edge-tts synthesis failed: ${err.message}`);
-      throw err;
-    }
-
-    if (!audioBuffer || audioBuffer.length < 1000) {
-      throw new Error('edge-tts produced empty or too-small audio');
-    }
-
-    // If no word timestamps, estimate from text
-    if (wordTimestamps.length === 0) {
-      const estimated = estimateWordTimestamps(scriptText, audioBuffer.length);
-      wordTimestamps.push(...estimated);
-    }
-
-    const durationMs = estimateAudioDuration(audioBuffer);
-
-    return {
-      audioBuffer,
-      wordTimestamps,
-      durationMs,
-      provider: 'edge-tts',
-      voice
-    };
-  }
-};
-
-// ============================================================
-// TIER 2: gTTS (Google Text-to-Speech) — FALLBACK
-// Free, unlimited, lower quality but reliable
-// (Kokoro.js skipped in GH Actions — too heavy for CI)
-// ============================================================
-const gTTS = {
-  name: 'gtts',
-
-  async synthesize(scriptText, options = {}) {
-    const gttsLib = require('node-gtts');
-    const lang = options.lang || 'en';
-    const tts = gttsLib(lang);
-
-    // Remove pause markers for gTTS (doesn't support SSML)
-    const cleanText = scriptText.replace(/\[PAUSE_[\d.]+s\]/g, '. ');
-
-    return new Promise((resolve, reject) => {
-      const chunks = [];
-      const stream = tts.stream(cleanText);
-
-      stream.on('data', chunk => chunks.push(chunk));
-      stream.on('end', () => {
-        const audioBuffer = Buffer.concat(chunks);
-        if (audioBuffer.length < 500) {
-          return reject(new Error('gTTS produced empty audio'));
-        }
-
-        const durationMs = estimateAudioDuration(audioBuffer);
-        const wordTimestamps = estimateWordTimestamps(cleanText, durationMs);
-
-        resolve({
-          audioBuffer,
-          wordTimestamps,
-          durationMs,
-          provider: 'gtts',
-          voice: `gtts-${lang}`
-        });
-      });
-      stream.on('error', reject);
-    });
-  }
-};
-
-// ============================================================
-// TIER 3: OpenAI TTS (Optional Paid — Ultra Realistic)
-// Only used if OPENAI_API_KEY is set AND other tiers fail
-// ============================================================
-const openaiTTS = {
-  name: 'openai-tts',
-
-  async synthesize(scriptText, options = {}) {
-    const key = process.env.OPENAI_API_KEY;
-    if (!key) throw new Error('OPENAI_API_KEY not set');
-
-    const cleanText = scriptText.replace(/\[PAUSE_[\d.]+s\]/g, '... ');
-    const voices = ['onyx', 'nova', 'alloy', 'echo', 'fable', 'shimmer'];
-    const voice = voices[Math.floor(Math.random() * voices.length)];
-
-    const res = await fetch('https://api.openai.com/v1/audio/speech', {
+    const res = await fetch('https://api.cartesia.ai/tts/bytes', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`
+        'Cartesia-Version': '2024-06-10',
+        'X-API-Key': key,
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'tts-1-hd',
-        input: cleanText,
-        voice,
-        response_format: 'mp3',
-        speed: 1.05
+        model_id: 'sonic-english',
+        transcript: cleanText,
+        voice: {
+          mode: 'id',
+          id: 'e07c00bc-4134-4eae-9ea4-1a55fb45746b'
+        },
+        output_format: {
+          container: 'mp3',
+          encoding: 'pcm_f32le',
+          sample_rate: 44100
+        }
       }),
       signal: AbortSignal.timeout(60000)
     });
 
-    if (!res.ok) throw new Error(`OpenAI TTS HTTP ${res.status}`);
+    if (!res.ok) {
+      throw new Error(`NexusTTS HTTP ${res.status}: ${await res.text()}`);
+    }
 
     const audioBuffer = Buffer.from(await res.arrayBuffer());
+    
+    if (!audioBuffer || audioBuffer.length < 1000) {
+      throw new Error('NexusTTS produced empty or too-small audio');
+    }
+
     const durationMs = estimateAudioDuration(audioBuffer);
     const wordTimestamps = estimateWordTimestamps(cleanText, durationMs);
 
@@ -170,8 +61,8 @@ const openaiTTS = {
       audioBuffer,
       wordTimestamps,
       durationMs,
-      provider: 'openai-tts',
-      voice: `openai-${voice}`
+      provider: 'nexustts-cartesia',
+      voice: 'e07c00bc-4134-4eae-9ea4-1a55fb45746b'
     };
   }
 };
@@ -180,25 +71,12 @@ const openaiTTS = {
 // UTILITY FUNCTIONS
 // ============================================================
 
-/**
- * Estimate audio duration from buffer size.
- * Rough: MP3 at 128kbps = 16KB/sec
- * @param {Buffer} buffer
- * @returns {number} Duration in milliseconds
- */
 function estimateAudioDuration(buffer) {
   const bytes = buffer.length;
   const bytesPerSec = 16000; // ~128kbps MP3
   return Math.round((bytes / bytesPerSec) * 1000);
 }
 
-/**
- * Estimate word-level timestamps from text when TTS doesn't provide them.
- * Uses average speech rate of ~150 words per minute.
- * @param {string} text
- * @param {number} totalDurationMs
- * @returns {Array<{word: string, startMs: number, endMs: number}>}
- */
 function estimateWordTimestamps(text, totalDurationMs) {
   const words = text.split(/\s+/).filter(w => w.length > 0);
   if (words.length === 0) return [];
@@ -211,11 +89,6 @@ function estimateWordTimestamps(text, totalDurationMs) {
   }));
 }
 
-/**
- * Save audio buffer to a file.
- * @param {Buffer} buffer
- * @param {string} filePath
- */
 function saveAudio(buffer, filePath) {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -224,63 +97,32 @@ function saveAudio(buffer, filePath) {
 }
 
 // ============================================================
-// MAIN VOICE GENERATION — 3-TIER CASCADE
+// MAIN VOICE GENERATION
 // ============================================================
-
-/**
- * Generate voice audio from script text using the TTS cascade.
- *
- * Tier 1: edge-tts (free, unlimited, high quality)
- * Tier 2: gTTS (free, unlimited, lower quality)
- * Tier 3: OpenAI TTS (paid, only if API key exists and others fail)
- *
- * @param {string} scriptText - Full script with [PAUSE_0.5s] markers
- * @param {Object} options
- * @param {string} options.accountId - For voice rotation tracking
- * @param {string} options.outputPath - Where to save the audio file
- * @returns {Promise<{audioPath: string, wordTimestamps: Array, durationMs: number, provider: string, voice: string}>}
- */
 async function generateVoice(scriptText, options = {}) {
   const outputPath = options.outputPath || '/tmp/build/audio/voice.mp3';
 
-  // Get recent voices for anti-fingerprint rotation
-  let recentVoices = [];
-  if (options.accountId) {
-    recentVoices = await getRecentVoices(options.accountId);
+  log.info(`TTS: Trying NexusTTS...`);
+  try {
+    const result = await withRetry(
+      () => nexusTTS.synthesize(scriptText),
+      { maxRetries: 2, name: 'tts-nexustts', baseDelay: 2000 }
+    );
+
+    saveAudio(result.audioBuffer, outputPath);
+
+    log.info(`TTS: NexusTTS succeeded — ${result.durationMs}ms, voice: ${result.voice}`);
+    return {
+      audioPath: outputPath,
+      wordTimestamps: result.wordTimestamps,
+      durationMs: result.durationMs,
+      provider: result.provider,
+      voice: result.voice
+    };
+  } catch (err) {
+    log.error(`TTS NexusTTS failed: ${err.message}`);
+    throw new Error('ALL_TTS_PROVIDERS_EXHAUSTED');
   }
-
-  const tiers = [edgeTTS, gTTS];
-
-  // Only add OpenAI if key exists
-  if (process.env.OPENAI_API_KEY) {
-    tiers.splice(1, 0, openaiTTS); // Insert after edge-tts, before gTTS
-  }
-
-  for (const tier of tiers) {
-    try {
-      log.info(`TTS: Trying ${tier.name}...`);
-      const result = await withRetry(
-        () => tier.synthesize(scriptText, { recentVoices }),
-        { maxRetries: 2, name: `tts-${tier.name}`, baseDelay: 2000 }
-      );
-
-      saveAudio(result.audioBuffer, outputPath);
-
-      log.info(`TTS: ${tier.name} succeeded — ${result.durationMs}ms, voice: ${result.voice}`);
-      return {
-        audioPath: outputPath,
-        wordTimestamps: result.wordTimestamps,
-        durationMs: result.durationMs,
-        provider: result.provider,
-        voice: result.voice
-      };
-    } catch (err) {
-      log.warn(`TTS ${tier.name} failed: ${err.message}`);
-      continue;
-    }
-  }
-
-  throw new Error('ALL_TTS_PROVIDERS_EXHAUSTED');
 }
 
 module.exports = { generateVoice, estimateWordTimestamps, estimateAudioDuration };

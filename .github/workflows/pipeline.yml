@@ -59,6 +59,7 @@ jobs:
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NEXUSTTS_API_KEY: ${{ secrets.NEXUSTTS_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
       - name: Run pipeline
@@ -72,6 +73,7 @@ jobs:
           GITHUB_MODELS_TOKEN: ${{ secrets.GITHUB_MODELS_TOKEN }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NEXUSTTS_API_KEY: ${{ secrets.NEXUSTTS_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           YT_TECH_MAIN_CLIENT_ID: ${{ secrets.YT_TECH_MAIN_CLIENT_ID }}
