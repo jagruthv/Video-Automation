@@ -1,0 +1,53 @@
+# ============================================================
+# AURA — Metrics Collector
+# Runs 2x/day to pull YouTube/IG analytics into MongoDB.
+# Lightweight: only API reads, no FFmpeg needed.
+# ============================================================
+name: Collect Metrics
+
+on:
+  schedule:
+    # 06:00 UTC and 18:00 UTC (twice daily)
+    - cron: '0 6 * * *'
+    - cron: '0 18 * * *'
+
+  workflow_dispatch: {}
+
+concurrency:
+  group: aura-metrics
+  cancel-in-progress: true
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Collect metrics
+        run: node src/modules/analytics-collector.js
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          YT_TECH_MAIN_CLIENT_ID: ${{ secrets.YT_TECH_MAIN_CLIENT_ID }}
+          YT_TECH_MAIN_CLIENT_SECRET: ${{ secrets.YT_TECH_MAIN_CLIENT_SECRET }}
+          YT_TECH_MAIN_REFRESH_TOKEN: ${{ secrets.YT_TECH_MAIN_REFRESH_TOKEN }}
+          YT_HISTORY_CLIENT_ID: ${{ secrets.YT_HISTORY_CLIENT_ID }}
+          YT_HISTORY_CLIENT_SECRET: ${{ secrets.YT_HISTORY_CLIENT_SECRET }}
+          YT_HISTORY_REFRESH_TOKEN: ${{ secrets.YT_HISTORY_REFRESH_TOKEN }}
+          IG_TECH_MAIN_ACCESS_TOKEN: ${{ secrets.IG_TECH_MAIN_ACCESS_TOKEN }}
+          IG_TECH_MAIN_USER_ID: ${{ secrets.IG_TECH_MAIN_USER_ID }}
+          IG_HISTORY_ACCESS_TOKEN: ${{ secrets.IG_HISTORY_ACCESS_TOKEN }}
+          IG_HISTORY_USER_ID: ${{ secrets.IG_HISTORY_USER_ID }}
+          NODE_ENV: production
+          LOG_LEVEL: info
