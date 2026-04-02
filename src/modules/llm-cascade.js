@@ -25,13 +25,15 @@ SCRIPT RULES:
    'And it is completely free.'
 4. End with a benefit-driven CTA: "Subscribe to Vibecoder Daily to stay ahead of 99% of coders."
 
-IMAGE PROMPT RULES:
-Write 3 highly descriptive, cinematic AI image prompts that visually match the beginning, middle, and end of the script.
-Each prompt must be vivid and photorealistic. Example: "a glowing cyberpunk hacker typing furiously in a neon-lit underground server room, 8k resolution, dramatic lighting, ultra-detailed"
+VISUAL SEQUENCE RULES:
+You must direct a sequence of 6 to 8 visual scenes that perfectly match the script.
+You must output a mix of highly descriptive AI image prompts AND concise video search queries.
 
 VIDEO EFFECT RULES:
-For each of the 3 images, pick EXACTLY ONE effect from this list: zoom_in, pan_right, cyberpunk_color, bw_hacker, glitch
-Match the effect to the mood of that image.
+For EVERY scene (whether video or image), pick EXACTLY ONE effect from this list: zoom_in, pan_right, cyberpunk_color, bw_hacker, glitch.
+
+LENGTH REQUIREMENT:
+You MUST write exactly 80 to 100 words in the script. The video must be at least 45 seconds long. Do not write short 30-word scripts.
 
 DESCRIPTION RULES:
 Write a high-energy YouTube description mixing English and conversational Telugu (Tanglish).
@@ -43,9 +45,8 @@ Must follow this structure:
 
 OUTPUT FORMAT: Respond ONLY with a single valid JSON object. No markdown fences. No explanation:
 {
-  "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only.",
-  "imagePrompts": ["vivid prompt for image 1", "vivid prompt for image 2", "vivid prompt for image 3"],
-  "videoEffects": ["effect_for_image_1", "effect_for_image_2", "effect_for_image_3"],
+  "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only. MUST be 80-100 words.",
+  "visuals": [{"type": "video", "query": "hacker typing", "effect": "zoom_in"}, {"type": "image", "prompt": "photorealistic glowing cyberpunk robot, 8k", "effect": "cyberpunk_color"}],
   "youtubeTitle": "Max 70 chars. High energy. 1 emoji. Include #shorts.",
   "youtubeDescription": "Tanglish description following exact structure above."
 }`;
@@ -94,14 +95,20 @@ function parseScriptJSON(text) {
  * @returns {boolean}
  */
 function validateScript(script) {
+  if (!script || typeof script !== 'object') return false;
+  if (!script.script) return false;
+  
+  // Word count validation to force fallback reprompting on lazy LLMs
+  const wordCount = script.script.split(/\s+/).filter(w => w.length > 0).length;
+  if (wordCount < 60) {
+    throw new Error(`Script length validation failed: Only ${wordCount} words (minimum 60 strictly required.)`);
+  }
+
+  // Validate internals
   return !!(
-    script.script &&
-    script.imagePrompts &&
-    Array.isArray(script.imagePrompts) &&
-    script.imagePrompts.length === 3 &&
-    script.videoEffects &&
-    Array.isArray(script.videoEffects) &&
-    script.videoEffects.length === 3 &&
+    script.visuals &&
+    Array.isArray(script.visuals) &&
+    script.visuals.length >= 4 &&
     script.youtubeTitle &&
     script.youtubeDescription
   );
