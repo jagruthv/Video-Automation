@@ -40,37 +40,28 @@ const edgeTTS = {
     const voice = selectVoice(recentVoices);
     log.info(`edge-tts: Using voice "${voice}"`);
 
-    const tts = new EdgeTTS();
-    await tts.setVoice(voice);
-
-    // Apply SSML prosody for human-like speech
-    const ssml = buildSSML(scriptText, voice, {
-      isHook: false
-    });
-
-    // Synthesize with word boundary events
     const wordTimestamps = [];
     let audioBuffer;
 
     try {
-      // edge-tts-universal synthesize method
-      const result = await tts.synthesize(scriptText);
-      audioBuffer = result.audio;
+      // edge-tts-universal 1.4+ synthesize API
+      const tts = new EdgeTTS(scriptText, voice);
+      const result = await tts.synthesize();
+      audioBuffer = Buffer.from(await result.audio.arrayBuffer());
 
-      // Extract word boundaries if available
-      if (result.wordBoundaries && Array.isArray(result.wordBoundaries)) {
-        for (const wb of result.wordBoundaries) {
+      // Extract word boundaries array (now called subtitle)
+      if (result.subtitle && Array.isArray(result.subtitle)) {
+        for (const wb of result.subtitle) {
           wordTimestamps.push({
-            word: wb.text || wb.word,
-            startMs: Math.round((wb.audioOffset || wb.offset || 0) / 10000),
-            endMs: Math.round(((wb.audioOffset || wb.offset || 0) + (wb.duration || 2500000)) / 10000)
+            word: wb.text,
+            startMs: Math.round(wb.offset / 10000),
+            endMs: Math.round((wb.offset + wb.duration) / 10000)
           });
         }
       }
-    } catch (ssmlErr) {
-      log.warn(`edge-tts SSML synthesis failed, falling back to plain text: ${ssmlErr.message}`);
-      const result = await tts.synthesize(scriptText);
-      audioBuffer = result.audio;
+    } catch (err) {
+      log.warn(`edge-tts synthesis failed: ${err.message}`);
+      throw err;
     }
 
     if (!audioBuffer || audioBuffer.length < 1000) {
