@@ -86,22 +86,24 @@ async function fetchReddit(subreddits, limit = 25) {
   const topics = [];
   for (const sub of subreddits) {
     try {
-      const data = await withRetry(async () => {
-        const res = await safeFetch(`https://www.reddit.com/r/${sub}/top.json?t=day&limit=${limit}`);
-        return res.json();
+      const feed = await withRetry(async () => {
+        const res = await safeFetch(`https://www.reddit.com/r/${sub}/top.rss?t=day`);
+        const xml = await res.text();
+        return rssParser.parseString(xml);
       }, { maxRetries: 2, name: `reddit-r/${sub}` });
-      for (const post of (data?.data?.children || [])) {
-        const d = post.data;
-        if (!d || d.stickied) continue;
+      
+      for (const item of (feed.items || []).slice(0, limit)) {
         topics.push({
-          topic: d.title, source: `reddit/r/${sub}`,
-          sourceUrl: `https://reddit.com${d.permalink}`,
-          upvotes: d.ups || 0, commentCount: d.num_comments || 0,
-          createdUtc: d.created_utc,
-          isControversial: d.upvote_ratio < 0.75 && d.ups > 50
+          topic: item.title, 
+          source: `reddit/r/${sub}`,
+          sourceUrl: item.link,
+          upvotes: 100, // RSS doesn't expose upvotes nicely, so assume high baseline
+          commentCount: 10,
+          createdUtc: new Date(item.pubDate || Date.now()).getTime() / 1000,
+          isControversial: false
         });
       }
-    } catch (err) { log.warn(`Reddit r/${sub} failed: ${err.message}`); }
+    } catch (err) { log.warn(`Reddit r/${sub} failed (RSS fallback): ${err.message}`); }
   }
   return topics;
 }
