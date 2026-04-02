@@ -33,9 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      # This clears those yellow warnings and uses the latest engine
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    
+      
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,5 +81,6 @@ jobs:
           NODE_ENV: production
           LOG_LEVEL: info
           MAX_DAILY_UPLOADS_PER_CHANNEL: '5'
+          ANTIFLAG_UNIQUENESS_THRESHOLD: '30'
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           CHANNEL_FILTER: ${{ github.event.inputs.channel_filter || '' }}
