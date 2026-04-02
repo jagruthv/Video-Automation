@@ -162,61 +162,89 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
   // Validate we have image clips
   if (numImages === 0) throw new Error('No visual clips provided to assembler');
 
-  if (numImages === 1) {
-    // Only one image — just apply effect + loop to fill duration
-    const clip = visualClips[0];
-    const effectName = VALID_EFFECTS.includes(clip.effect) ? clip.effect : 'zoom_in';
-    const filterStr = EFFECT_FILTERS[effectName](frames * numImages);
-    await runFFmpeg(
-      `ffmpeg -y -loop 1 -i "${clip.path}" -t ${audioDuration} ` +
-      `-vf "scale=1200:2140,${filterStr},setsar=1" ` +
-      `-c:v libx264 -preset fast -pix_fmt yuv420p "${bgVideo}"`,
-      `Single image with ${effectName} effect`
-    );
-  } else {
-    // Build individual effect clips for each image, then xfade-chain them
-    const segmentPaths = [];
-    for (let i = 0; i < numImages; i++) {
-      const clip = visualClips[i];
+  try {
+    if (numImages === 1) {
+      // Only one image — just apply effect + loop to fill duration
+      const clip = visualClips[0];
       const effectName = VALID_EFFECTS.includes(clip.effect) ? clip.effect : 'zoom_in';
-      const segDuration = i < numImages - 1 ? durationPerImage : audioDuration - (durationPerImage * (numImages - 1));
-      const segFrames = Math.round(segDuration * 30);
-      const segPath = path.join(buildDir, `seg_${i}.mp4`);
-
-      const filterStr = EFFECT_FILTERS[effectName](segFrames);
+      const filterStr = EFFECT_FILTERS[effectName](frames * numImages);
       await runFFmpeg(
-        `ffmpeg -y -loop 1 -i "${clip.path}" -t ${segDuration + XFADE_DUR} ` +
+        `ffmpeg -y -loop 1 -i "${clip.path}" -t ${audioDuration} ` +
         `-vf "scale=1200:2140,${filterStr},setsar=1" ` +
-        `-c:v libx264 -preset fast -pix_fmt yuv420p "${segPath}"`,
-        `Image ${i + 1}/${numImages}: ${effectName} effect`
+        `-c:v libx264 -preset fast -pix_fmt yuv420p "${bgVideo}"`,
+        `Single image with ${effectName} effect`
       );
-      segmentPaths.push(segPath);
+    } else {
+      // Build individual effect clips for each image, then xfade-chain them
+      const segmentPaths = [];
+      for (let i = 0; i < numImages; i++) {
+        const clip = visualClips[i];
+        const effectName = VALID_EFFECTS.includes(clip.effect) ? clip.effect : 'zoom_in';
+        const segDuration = i < numImages - 1 ? durationPerImage : audioDuration - (durationPerImage * (numImages - 1));
+        const segFrames = Math.round(segDuration * 30);
+        const segPath = path.join(buildDir, `seg_${i}.mp4`);
+
+        const filterStr = EFFECT_FILTERS[effectName](segFrames);
+        await runFFmpeg(
+          `ffmpeg -y -loop 1 -i "${clip.path}" -t ${segDuration + XFADE_DUR} ` +
+          `-vf "scale=1200:2140,${filterStr},setsar=1" ` +
+          `-c:v libx264 -preset fast -pix_fmt yuv420p "${segPath}"`,
+          `Image ${i + 1}/${numImages}: ${effectName} effect`
+        );
+        segmentPaths.push(segPath);
+      }
+
+      // Chain xfade transitions: seg0 -> xfade -> seg1 -> xfade -> seg2
+      // xfade offset = cumulative duration of previous segments minus overlap
+      let inputs = segmentPaths.map(p => `-i "${p}"`).join(' ');
+      let filterComplex = '';
+      let lastOutput = '[0:v]';
+
+      for (let i = 1; i < numImages; i++) {
+        const offset = (durationPerImage * i) - (XFADE_DUR * (i - 1)) - XFADE_DUR;
+        const outLabel = i < numImages - 1 ? `[xf${i}]` : '[vout]';
+        filterComplex += `${lastOutput}[${i}:v]xfade=transition=fade:duration=${XFADE_DUR}:offset=${Math.max(0, offset).toFixed(2)}${outLabel};`;
+        lastOutput = outLabel;
+      }
+      // Remove trailing semicolon
+      filterComplex = filterComplex.replace(/;$/, '');
+
+      await runFFmpeg(
+        `ffmpeg -y ${inputs} -filter_complex "${filterComplex}" -map "[vout]" ` +
+        `-t ${audioDuration} -c:v libx264 -preset fast -pix_fmt yuv420p "${bgVideo}"`,
+        'Crossfade transition stitching'
+      );
+
+      // Cleanup segment files
+      for (const sp of segmentPaths) {
+        try { fs.unlinkSync(sp); } catch {}
+      }
     }
-
-    // Chain xfade transitions: seg0 -> xfade -> seg1 -> xfade -> seg2
-    // xfade offset = cumulative duration of previous segments minus overlap
-    let inputs = segmentPaths.map(p => `-i "${p}"`).join(' ');
-    let filterComplex = '';
-    let lastOutput = '[0:v]';
-
-    for (let i = 1; i < numImages; i++) {
-      const offset = (durationPerImage * i) - (XFADE_DUR * (i - 1)) - XFADE_DUR;
-      const outLabel = i < numImages - 1 ? `[xf${i}]` : '[vout]';
-      filterComplex += `${lastOutput}[${i}:v]xfade=transition=fade:duration=${XFADE_DUR}:offset=${Math.max(0, offset).toFixed(2)}${outLabel};`;
-      lastOutput = outLabel;
-    }
-    // Remove trailing semicolon
-    filterComplex = filterComplex.replace(/;$/, '');
-
-    await runFFmpeg(
-      `ffmpeg -y ${inputs} -filter_complex "${filterComplex}" -map "[vout]" ` +
-      `-t ${audioDuration} -c:v libx264 -preset fast -pix_fmt yuv420p "${bgVideo}"`,
-      'Crossfade transition stitching'
-    );
-
-    // Cleanup segment files
-    for (const sp of segmentPaths) {
-      try { fs.unlinkSync(sp); } catch {}
+  } catch (err) {
+    log.warn(`Cinematic assembly failed, falling back to basic concatenation. Error: ${err.message}`);
+    
+    // The Bulletproof Fallback
+    if (visualClips.length >= 3) {
+      const inputs = visualClips.slice(0, 3).map(c => `-loop 1 -t ${durationPerImage} -i "${c.path}"`).join(' ');
+      const filterComplex = 
+        `[0:v]scale=1080:1920,setsar=1[v0];` +
+        `[1:v]scale=1080:1920,setsar=1[v1];` +
+        `[2:v]scale=1080:1920,setsar=1[v2];` +
+        `[v0][v1][v2]concat=n=3:v=1:a=0[outv]`;
+        
+      await runFFmpeg(
+        `ffmpeg -y ${inputs} -filter_complex "${filterComplex}" -map "[outv]" ` +
+        `-t ${audioDuration} -c:v libx264 -preset fast -pix_fmt yuv420p "${bgVideo}"`,
+        'Fallback concat 3 images'
+      );
+    } else {
+      const clip = visualClips[0];
+      await runFFmpeg(
+        `ffmpeg -y -loop 1 -i "${clip.path}" -t ${audioDuration} ` +
+        `-vf "scale=1080:1920,setsar=1" ` +
+        `-c:v libx264 -preset fast -pix_fmt yuv420p "${bgVideo}"`,
+        'Fallback basic single image'
+      );
     }
   }
 
