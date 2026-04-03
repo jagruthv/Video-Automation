@@ -7,11 +7,14 @@ const { withRetry } = require('../utils/retry');
 
 const log = getModuleLogger('visual-engine');
 
+const VISUAL_TIMEOUT_MS = 60000; // 60s — Pollinations AI generation needs patience
+
 /**
  * Download a file from URL to local path.
+ * Uses a 60s timeout to allow AI image generation to complete.
  */
 async function downloadFile(url, outputPath) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+  const res = await fetch(url, { signal: AbortSignal.timeout(VISUAL_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status} from ${url}`);
   const buffer = Buffer.from(await res.arrayBuffer());
   const dir = path.dirname(outputPath);
@@ -20,76 +23,152 @@ async function downloadFile(url, outputPath) {
 }
 
 /**
- * Smart Keyword Extraction for Stock API
+ * Smart Keyword Extraction for Stock APIs — strips filler words, takes first 3 meaningful terms.
  */
 function extractKeywords(prompt) {
-  let cleaned = prompt.replace(/^(A|An|The)\s+/i, '');
+  let cleaned = (prompt || '').replace(/^(A|An|The)\s+/i, '');
   cleaned = cleaned.split(',')[0].trim();
   const words = cleaned.split(' ').filter(w => w.length > 2);
   return words.slice(0, 3).join(' ');
 }
 
 /**
- * Fetch a Pexels Video
+ * Fetch a Pexels Video (portrait orientation, HD quality).
+ * Timeout: 60s.
  */
 async function fetchPexelsVideo(query, outputPath) {
-  if (!process.env.PEXELS_API_KEY) throw new Error('PEXELS_API_KEY not set for video fetching');
-  const res = await fetch(`https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&size=large&per_page=3`, {
-    headers: { 'Authorization': process.env.PEXELS_API_KEY }
-  });
+  if (!process.env.PEXELS_API_KEY) throw new Error('PEXELS_API_KEY not set');
+  const res = await fetch(
+    `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&size=large&per_page=5`,
+    {
+      headers: { 'Authorization': process.env.PEXELS_API_KEY },
+      signal: AbortSignal.timeout(VISUAL_TIMEOUT_MS)
+    }
+  );
   if (!res.ok) throw new Error(`Pexels Video HTTP ${res.status}`);
   const data = await res.json();
-  if (data.videos && data.videos.length > 0) {
-    const video = data.videos[Math.floor(Math.random() * data.videos.length)];
-    const file = video.video_files.find(f => f.quality === 'hd') || video.video_files[0];
-    await downloadFile(file.link, outputPath);
-    return 'Pexels Video';
-  }
-  throw new Error('No videos found');
+  if (!data.videos || data.videos.length === 0) throw new Error('No Pexels videos found');
+  const video = data.videos[Math.floor(Math.random() * data.videos.length)];
+  const file = video.video_files.find(f => f.quality === 'hd') || video.video_files[0];
+  await downloadFile(file.link, outputPath);
+  return 'Pexels Video';
 }
 
 /**
- * Fallback to Pexels or Pixabay Image
+ * Fetch an AI-generated image from Pollinations.ai.
+ * Timeout: 60s — give the AI time to render.
  */
-async function fetchStockImage(prompt, outputPath) {
-  const query = extractKeywords(prompt);
-  log.info(`Pollinations failed. Stock Fallback: searching for "${query}"`);
-
-  if (process.env.PEXELS_API_KEY) {
-    try {
-      const res = await fetch(`https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=3`, {
-        headers: { 'Authorization': process.env.PEXELS_API_KEY }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.photos && data.photos.length > 0) {
-          const photo = data.photos[Math.floor(Math.random() * data.photos.length)];
-          await downloadFile(photo.src.portrait || photo.src.large, outputPath);
-          return 'Pexels';
-        }
-      }
-    } catch (err) { log.warn(`Pexels fallback failed: ${err.message}`); }
-  }
-
-  if (process.env.PIXABAY_API_KEY) {
-    try {
-      const res = await fetch(`https://pixabay.com/api/?key=${process.env.PIXABAY_API_KEY}&q=${encodeURIComponent(query)}&image_type=photo&orientation=vertical`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.hits && data.hits.length > 0) {
-          const hit = data.hits[Math.floor(Math.random() * Math.min(data.hits.length, 3))];
-          await downloadFile(hit.largeImageURL, outputPath);
-          return 'Pixabay';
-        }
-      }
-    } catch (err) { log.warn(`Pixabay fallback failed: ${err.message}`); }
-  }
-
-  throw new Error('Stock API fallback exhausted or keys not configured');
+async function fetchPollinationsImage(prompt, outputPath) {
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1920&nologo=true`;
+  await downloadFile(url, outputPath);
+  if (fs.statSync(outputPath).size < 10000) throw new Error('Pollinations returned an image that is too small (likely placeholder)');
+  return 'Pollinations.ai';
 }
 
 /**
- * Acquire visuals natively mixing Pexels Videos and Pollinations Images
+ * Fetch a stock image from Pexels Images API.
+ * Timeout: 60s.
+ */
+async function fetchPexelsImage(query, outputPath) {
+  if (!process.env.PEXELS_API_KEY) throw new Error('PEXELS_API_KEY not set');
+  const res = await fetch(
+    `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=5`,
+    {
+      headers: { 'Authorization': process.env.PEXELS_API_KEY },
+      signal: AbortSignal.timeout(VISUAL_TIMEOUT_MS)
+    }
+  );
+  if (!res.ok) throw new Error(`Pexels Image HTTP ${res.status}`);
+  const data = await res.json();
+  if (!data.photos || data.photos.length === 0) throw new Error('No Pexels photos found');
+  const photo = data.photos[Math.floor(Math.random() * data.photos.length)];
+  await downloadFile(photo.src.portrait || photo.src.large, outputPath);
+  return 'Pexels Image';
+}
+
+/**
+ * Fetch a stock image from Pixabay API.
+ * Timeout: 60s.
+ */
+async function fetchPixabayImage(query, outputPath) {
+  if (!process.env.PIXABAY_API_KEY) throw new Error('PIXABAY_API_KEY not set');
+  const res = await fetch(
+    `https://pixabay.com/api/?key=${process.env.PIXABAY_API_KEY}&q=${encodeURIComponent(query)}&image_type=photo&orientation=vertical&per_page=5`,
+    { signal: AbortSignal.timeout(VISUAL_TIMEOUT_MS) }
+  );
+  if (!res.ok) throw new Error(`Pixabay HTTP ${res.status}`);
+  const data = await res.json();
+  if (!data.hits || data.hits.length === 0) throw new Error('No Pixabay images found');
+  const hit = data.hits[Math.floor(Math.random() * Math.min(data.hits.length, 3))];
+  await downloadFile(hit.largeImageURL, outputPath);
+  return 'Pixabay';
+}
+
+/**
+ * IMAGE FALLBACK CASCADE:
+ *   1. Pollinations AI (60s wait — best quality)
+ *   2. Pexels Image stock  
+ *   3. Pixabay stock
+ */
+async function acquireImage(prompt, outputPath, sceneIndex) {
+  const keywords = extractKeywords(prompt);
+
+  // PRIMARY: Pollinations AI image generation
+  try {
+    log.info(`Scene ${sceneIndex}: Pollinations AI → "${prompt.substring(0, 50)}..."`);
+    const provider = await withRetry(
+      () => fetchPollinationsImage(prompt, outputPath),
+      { maxRetries: 2, name: `pollinations-${sceneIndex}`, baseDelay: 3000 }
+    );
+    return { provider, attribution: 'Image by Pollinations.ai' };
+  } catch (err) {
+    log.warn(`Scene ${sceneIndex}: Pollinations failed (${err.message}). Trying Pexels Image...`);
+  }
+
+  // FALLBACK 1: Pexels stock image
+  try {
+    const provider = await fetchPexelsImage(keywords, outputPath);
+    return { provider, attribution: 'Photo by Pexels' };
+  } catch (err) {
+    log.warn(`Scene ${sceneIndex}: Pexels Image failed (${err.message}). Trying Pixabay...`);
+  }
+
+  // FALLBACK 2: Pixabay stock image
+  try {
+    const provider = await fetchPixabayImage(keywords, outputPath);
+    return { provider, attribution: 'Image by Pixabay' };
+  } catch (err) {
+    log.error(`Scene ${sceneIndex}: All image providers failed. ${err.message}`);
+    throw new Error(`All image providers exhausted for scene ${sceneIndex}`);
+  }
+}
+
+/**
+ * VIDEO FALLBACK CASCADE:
+ *   1. Pexels Video (portrait, HD)
+ *   2. Pollinations AI image using query as prompt (graceful downgrade)
+ */
+async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
+  // PRIMARY: Pexels Video
+  try {
+    log.info(`Scene ${sceneIndex}: Pexels Video → "${query}"`);
+    const provider = await withRetry(
+      () => fetchPexelsVideo(query, videoPath),
+      { maxRetries: 2, name: `pexels-video-${sceneIndex}`, baseDelay: 2000 }
+    );
+    return { path: videoPath, type: 'video', provider, attribution: 'Video by Pexels' };
+  } catch (err) {
+    log.warn(`Scene ${sceneIndex}: Pexels Video failed (${err.message}). Falling back to Pollinations image...`);
+  }
+
+  // FALLBACK: Pollinations AI image using the video query as image prompt
+  const { provider, attribution } = await acquireImage(query, imageFallbackPath, sceneIndex);
+  return { path: imageFallbackPath, type: 'image', provider, attribution };
+}
+
+/**
+ * Master visual acquisition — serially fetches each scene with full fallback chains.
+ * Returns clip metadata for the assembly engine.
  */
 async function acquireVisuals(scriptJson, targetDurationMs, outputDir = '/tmp/build/clips') {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
@@ -100,79 +179,42 @@ async function acquireVisuals(scriptJson, targetDurationMs, outputDir = '/tmp/bu
     { type: 'image', prompt: 'holographic neon sign', effect: 'glitch' }
   ];
 
-  log.info(`Generating ${visualsArray.length} hybrid visual items...`);
+  log.info(`Acquiring ${visualsArray.length} hybrid visual scenes...`);
   const clips = [];
 
   for (let i = 0; i < visualsArray.length; i++) {
     const item = visualsArray[i];
     const effect = item.effect || 'zoom_in';
-    const isVideo = item.type === 'video';
-    const extension = isVideo ? 'mp4' : 'jpg';
-    const mediaPath = path.join(outputDir, `scene_${i}.${extension}`);
-    
-    let sourceProvider = 'unknown';
-    let attributionText = '';
 
-    if (isVideo) {
-      try {
-        const query = item.query || item.prompt || 'technology';
-        await withRetry(() => fetchPexelsVideo(query, mediaPath), { maxRetries: 2, name: `video-${i}`, baseDelay: 2000 });
-        sourceProvider = 'pexels-video';
-        attributionText = 'Video by Pexels';
-      } catch (err) {
-        log.warn(`Failed to fetch video for ${item.query}, downgrading to image fallback: ${err.message}`);
-        // Fallback to stock image if video fails
-        try {
-          const stock = await fetchStockImage(item.query, mediaPath.replace('.mp4', '.jpg'));
-          sourceProvider = `stock-${stock}`;
-          attributionText = `Visual by ${stock}`;
-        } catch (e) { log.error(`Video and fallback image failed: ${e.message}`); continue; }
+    try {
+      if (item.type === 'video') {
+        const videoPath = path.join(outputDir, `scene_${i}.mp4`);
+        const imgFallbackPath = path.join(outputDir, `scene_${i}.jpg`);
+        const result = await acquireVideo(item.query || item.prompt || 'technology', videoPath, imgFallbackPath, i + 1);
+        clips.push({ ...result, effect, durationMs: 0 });
+        log.info(`Scene ${i + 1}/${visualsArray.length} acquired: ${result.type} (${result.provider})`);
+      } else {
+        const imgPath = path.join(outputDir, `scene_${i}.jpg`);
+        const prompt = item.prompt || item.query || 'futuristic technology';
+        const { provider, attribution } = await acquireImage(prompt, imgPath, i + 1);
+        clips.push({ path: imgPath, type: 'image', effect, provider, attribution, durationMs: 0 });
+        log.info(`Scene ${i + 1}/${visualsArray.length} acquired: image (${provider})`);
       }
-    } else {
-      try {
-        const prompt = item.prompt || item.query || 'technology';
-        const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1920&nologo=true`;
-        await withRetry(async () => {
-          await downloadFile(url, mediaPath);
-          if (fs.statSync(mediaPath).size < 10000) throw new Error('Image too small');
-        }, { maxRetries: 2, name: `pollinations-img-${i}`, baseDelay: 2000 });
-        sourceProvider = 'pollinations';
-        attributionText = 'Image by Pollinations.ai';
-      } catch (err) {
-        log.warn(`Pollinations failed for ${item.prompt}, falling back to stock API: ${err.message}`);
-        try {
-          const stock = await fetchStockImage(item.prompt, mediaPath);
-          sourceProvider = `stock-${stock}`;
-          attributionText = `Visual by ${stock}`;
-        } catch (e) { log.error(`All image fetching failed: ${e.message}`); continue; }
-      }
-    }
-
-    const finalPath = fs.existsSync(mediaPath) ? mediaPath : mediaPath.replace('.mp4', '.jpg');
-    if (fs.existsSync(finalPath)) {
-      clips.push({
-        path: finalPath,
-        type: finalPath.endsWith('.mp4') ? 'video' : 'image',
-        effect,
-        source: sourceProvider,
-        attribution: attributionText
-      });
-      log.info(`Acquired scene ${i+1}/${visualsArray.length}: ${finalPath} (${attributionText})`);
+    } catch (err) {
+      log.error(`Scene ${i + 1} completely failed — skipping: ${err.message}`);
     }
   }
 
   if (clips.length < 3) {
-    throw new Error('VISUAL_ACQUISITION_FAILED: Captured too few successful visual clips from providers.');
+    throw new Error(`VISUAL_ACQUISITION_FAILED: Only ${clips.length} scene(s) acquired — need at least 3.`);
   }
 
   const durationPerClip = Math.round(targetDurationMs / clips.length);
   clips.forEach(c => { c.durationMs = durationPerClip; });
 
-  log.info(`Visuals complete: ${clips.length} scenes, ~dividing ${Math.round(targetDurationMs / 1000)}s total audio into chunks`);
-  
-  // Mixed attribution list
+  log.info(`Visuals complete: ${clips.length} scenes, ~${Math.round(targetDurationMs / 1000)}s total divided equally.`);
+
   const attributions = [...new Set(clips.map(c => c.attribution))];
-  
   return { clips, provider: 'hybrid', attributions };
 }
 
