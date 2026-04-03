@@ -19,6 +19,12 @@ on:
         default: 'false'
         type: choice
         options: ['true', 'false']
+      force_now:
+        description: 'Force upload right now — bypass organic schedule'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['true', 'false']
       channel_filter:
         description: 'Only run for this accountId (blank = all)'
         required: false
@@ -63,7 +69,7 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
       - name: Run pipeline
-        run: node src/index.js
+        run: node src/index.js ${{ github.event.inputs.force_now == 'true' && '--force-now' || '' }}
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -86,3 +92,4 @@ jobs:
           ANTIFLAG_UNIQUENESS_THRESHOLD: '30'
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           CHANNEL_FILTER: ${{ github.event.inputs.channel_filter || '' }}
+          FORCE_NOW: ${{ github.event.inputs.force_now || 'false' }}
