@@ -61,6 +61,7 @@ async function uploadToStaging(videoPath, metadata) {
             method: 'PUT',
             headers: {
               'Authorization': 'Bearer ' + cleanKey,
+              'apikey': cleanKey,
               'Content-Type': 'video/mp4',
               'Content-Length': Buffer.byteLength(fileBuffer),
               'x-upsert': 'true'
