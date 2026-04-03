@@ -8,88 +8,45 @@ const { withRetry } = require('../utils/retry');
 const log = getModuleLogger('voice-engine');
 
 // ============================================================
-// NexusTTS (Cartesia) — PRIMARY
-// ============================================================
-const nexusTTS = {
-  name: 'nexustts-cartesia',
-
-  async synthesize(scriptText) {
-    const key = process.env.NEXUSTTS_API_KEY;
-    if (!key) throw new Error('NEXUSTTS_API_KEY not set');
-
-    const cleanText = scriptText.replace(/\[PAUSE_[\d.]+s\]/g, '');
-
-    const res = await fetch('https://api.cartesia.ai/tts/bytes', {
-      method: 'POST',
-      headers: {
-        'Cartesia-Version': '2024-06-10',
-        'X-API-Key': key,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model_id: 'sonic-english',
-        transcript: cleanText,
-        voice: {
-          mode: 'id',
-          id: 'e07c00bc-4134-4eae-9ea4-1a55fb45746b'
-        },
-        output_format: {
-          container: 'mp3',
-          encoding: 'pcm_f32le',
-          sample_rate: 44100
-        }
-      }),
-      signal: AbortSignal.timeout(60000)
-    });
-
-    if (!res.ok) {
-      throw new Error(`NexusTTS HTTP ${res.status}: ${await res.text()}`);
-    }
-
-    const audioBuffer = Buffer.from(await res.arrayBuffer());
-
-    if (!audioBuffer || audioBuffer.length < 1000) {
-      throw new Error('NexusTTS produced empty or too-small audio');
-    }
-
-    const durationMs = estimateAudioDuration(audioBuffer);
-    const wordTimestamps = estimateWordTimestamps(cleanText, durationMs);
-
-    return {
-      audioBuffer,
-      wordTimestamps,
-      durationMs,
-      provider: 'nexustts-cartesia',
-      voice: 'e07c00bc-4134-4eae-9ea4-1a55fb45746b'
-    };
-  }
-};
-
-// ============================================================
-// Microsoft Edge TTS — FALLBACK
-// Uses edge-tts-universal (already installed).
-// No API key required — free Microsoft Azure neural voices.
+// Microsoft Edge TTS — PRIMARY ENGINE
+// Free Microsoft Azure Neural TTS. No API key required.
+// Voice: en-US-ChristopherNeural (deep, resonant bass male)
+// Override via env: EDGE_VOICE_ID
 // ============================================================
 const microsoftEdgeTTS = {
   name: 'microsoft-edge-tts',
-  VOICE: 'en-US-ChristopherNeural', // High-quality male tech voice
+
+  get VOICE() {
+    return process.env.EDGE_VOICE_ID || 'en-US-ChristopherNeural';
+  },
 
   async synthesize(scriptText, outputPath) {
     const { Communicate } = require('edge-tts-universal');
-    const cleanText = scriptText.replace(/\[PAUSE_[\d.]+s\]/g, '');
+    const voiceName = this.VOICE;
+    const cleanText = scriptText.replace(/\[PAUSE_[\d.]+s\]/g, '').trim();
 
-    log.info(`Microsoft Edge TTS: synthesizing with voice ${this.VOICE}...`);
+    if (!cleanText) throw new Error('Edge TTS: Script text is empty after cleaning');
 
-    const communicate = new Communicate(cleanText, { voice: this.VOICE, rate: '-5%' });
+    log.info(`🎙️ Generating audio with heavy-bass Edge TTS voice: ${voiceName}...`);
+
+    const communicate = new Communicate(cleanText, {
+      voice: voiceName,
+      rate: '-5%',   // Slightly slower for dramatic pacing
+      pitch: '-5Hz'  // Slightly lower pitch to enhance bass resonance
+    });
 
     const dir = path.dirname(outputPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
     await communicate.save(outputPath);
 
+    if (!fs.existsSync(outputPath)) {
+      throw new Error('Edge TTS: Output file was not created');
+    }
+
     const audioBuffer = fs.readFileSync(outputPath);
     if (!audioBuffer || audioBuffer.length < 1000) {
-      throw new Error('Microsoft Edge TTS produced empty audio');
+      throw new Error('Edge TTS: Produced empty or too-small audio buffer');
     }
 
     const durationMs = estimateAudioDuration(audioBuffer);
@@ -100,7 +57,7 @@ const microsoftEdgeTTS = {
       wordTimestamps,
       durationMs,
       provider: 'microsoft-edge-tts',
-      voice: this.VOICE
+      voice: voiceName
     };
   }
 };
@@ -135,40 +92,29 @@ function saveAudio(buffer, filePath) {
 }
 
 // ============================================================
-// MAIN VOICE GENERATION — Cartesia → Microsoft Edge TTS
+// MAIN VOICE GENERATION — Edge TTS Primary
 // ============================================================
 async function generateVoice(scriptText, options = {}) {
   const outputPath = options.outputPath || '/tmp/build/audio/voice.mp3';
 
-  // PRIMARY: Cartesia NexusTTS
-  log.info(`TTS: Trying NexusTTS (Cartesia)...`);
-  try {
-    const result = await withRetry(
-      () => nexusTTS.synthesize(scriptText),
-      { maxRetries: 2, name: 'tts-nexustts', baseDelay: 2000 }
-    );
+  log.info(`TTS: Starting Microsoft Edge TTS (${microsoftEdgeTTS.VOICE})...`);
 
-    saveAudio(result.audioBuffer, outputPath);
-    log.info(`TTS: NexusTTS succeeded — ${result.durationMs}ms`);
-    return {
-      audioPath: outputPath,
-      wordTimestamps: result.wordTimestamps,
-      durationMs: result.durationMs,
-      provider: result.provider,
-      voice: result.voice
-    };
-  } catch (err) {
-    log.warn(`TTS: NexusTTS failed (${err.message}). Falling back to Microsoft Edge TTS...`);
-  }
-
-  // FALLBACK: Microsoft Edge TTS (free, no API key needed)
   try {
     const result = await withRetry(
       () => microsoftEdgeTTS.synthesize(scriptText, outputPath),
-      { maxRetries: 2, name: 'tts-edge', baseDelay: 1000 }
+      { maxRetries: 3, name: 'tts-edge', baseDelay: 2000 }
     );
 
-    log.info(`TTS: Microsoft Edge TTS succeeded — ${result.durationMs}ms, voice: ${result.voice}`);
+    // Audio is already saved to disk by Edge TTS's .save() method
+    // Re-save via saveAudio to ensure consistent logging
+    if (!fs.existsSync(outputPath)) {
+      saveAudio(result.audioBuffer, outputPath);
+    } else {
+      log.info(`Audio saved: ${outputPath} (${(result.audioBuffer.length / 1024).toFixed(0)}KB)`);
+    }
+
+    log.info(`TTS: Edge TTS succeeded — ${result.durationMs}ms, voice: ${result.voice}`);
+
     return {
       audioPath: outputPath,
       wordTimestamps: result.wordTimestamps,
@@ -177,7 +123,7 @@ async function generateVoice(scriptText, options = {}) {
       voice: result.voice
     };
   } catch (err) {
-    log.error(`TTS: Microsoft Edge TTS also failed: ${err.message}`);
+    log.error(`TTS: Microsoft Edge TTS failed after retries: ${err.message}`);
     throw new Error('ALL_TTS_PROVIDERS_EXHAUSTED');
   }
 }
