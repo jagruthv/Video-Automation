@@ -11,7 +11,7 @@ console.log('DEBUG: SUPABASE_URL starts with:', process.env.SUPABASE_URL ? proce
 
 let supabase;
 try {
-  // Use a custom fetch wrapper to inject duplex block and enforce 120s timeout globally
+  // Use a standard fetch wrapper for regular DB operations
   supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_KEY,
@@ -19,8 +19,8 @@ try {
       auth: { persistSession: false },
       global: {
         fetch: (url, options = {}) => {
-          options.duplex = 'half'; // Required for Node 20+ stream/buffer uploads
-          options.signal = AbortSignal.timeout(120000); // 120 seconds timeout lock
+          options.duplex = 'half'; // Required for Node 20+ stream/buffer
+          options.signal = AbortSignal.timeout(120000); 
           return fetch(url, options);
         }
       }
@@ -44,26 +44,37 @@ async function uploadToStaging(videoPath, metadata) {
     const filename = `${Date.now()}.mp4`;
     const storagePath = `uploads/${filename}`;
 
-    // 4. Add a log: "📦 Uploading 25MB+ payload to Supabase... Standby."
     log.info(`📦 Uploading 25MB+ payload to Supabase... Standby. (Path: ${storagePath})`);
 
-    // 2. Wrap the storage.from().upload() in a retry loop (3 attempts).
+    // REST API Endpoint specifically bypassing SDK bugs
+    const uploadUrl = `${process.env.SUPABASE_URL}/storage/v1/object/aura_videos/${storagePath}`;
+    
+    // Debug log to print the entire URL it's trying to hit
+    log.info(`[DEBUG] Attempting REST PUT to URL: ${uploadUrl}`);
+
+    // Wrap the REST upload in a retry loop (3 attempts)
     let uploadError = null;
     let success = false;
     
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const { error } = await supabase.storage
-          .from('aura_videos')
-          .upload(storagePath, fileBuffer, { 
-            contentType: 'video/mp4', 
-            upsert: false,
-            // 3. Add duplex: 'half' to the fetch options
-            duplex: 'half' 
-          });
-          
-        if (error) {
-          uploadError = error;
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'POST', // Supabase requires POST or PUT depending on endpoints, but storage insert is typically POST to upload, HTTP PUT for standard object insert
+          // Wait, user specified: "use a standard fetch() PUT request to the Supabase REST endpoint"
+          method: 'PUT',
+          headers: {
+            'Authorization': 'Bearer ' + process.env.SUPABASE_SERVICE_KEY,
+            'Content-Type': 'video/mp4',
+            'x-upsert': 'true'
+          },
+          body: fileBuffer,
+          duplex: 'half', // Keeps Node 20 safe
+          signal: AbortSignal.timeout(120000)
+        });
+
+        if (!uploadRes.ok) {
+          const errText = await uploadRes.text();
+          uploadError = new Error(`HTTP ${uploadRes.status}: ${errText}`);
         } else {
           success = true;
           break; // Upload passed!
@@ -73,13 +84,13 @@ async function uploadToStaging(videoPath, metadata) {
       }
       
       if (!success) {
-        log.warn(`Upload attempt ${attempt}/3 failed: ${uploadError.message}. Retrying...`);
+        log.warn(`Upload attempt ${attempt}/3 failed: ${uploadError?.message}. Retrying...`);
         await new Promise(r => setTimeout(r, 5000));
       }
     }
 
     if (!success) {
-      throw new Error(`Storage upload critically failed after 3 attempts: ${uploadError.message}`);
+      throw new Error(`Storage upload critically failed after 3 attempts: ${uploadError?.message}`);
     }
 
     // Action B: Retrieve Public URL
