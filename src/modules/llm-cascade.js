@@ -37,19 +37,19 @@ Your script MUST be a minimum of 100 words. Explain the technical concepts in de
 The video must be at least 45 seconds long. Do not write short 30-word scripts.
 
 DESCRIPTION RULES:
-Write a high-energy YouTube description mixing English and conversational Telugu (Tanglish).
+Write a high-energy English YouTube description. No other languages.
 Must follow this structure:
-- Start with a Telugu hook like "Eppudaina chusara...?" or "Mee life change avutundi bro..."
+- Start with a punchy English hook like "Did you know...?" or "This changes everything for coders."
 - 3 bullet points summarising the key revelations in the video.
-- Call to action: "Vibecoder Daily ki subscribe cheyyandi future tech updates kosam!"
-- End with 15 comma-separated SEO hashtags (e.g., #AITech, #CodingShorts).
+- Call to action: "Subscribe to Vibecoder Daily for more tech updates!"
+- End with 10-15 relevant SEO hashtags (e.g., #AITech, #CodingShorts).
 
 OUTPUT FORMAT: Respond ONLY with a single valid JSON object. No markdown fences. No explanation:
 {
   "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only. MUST be minimum 100 words.",
   "visuals": [{"type": "video", "query": "hacker typing", "effect": "zoom_in"}, {"type": "image", "prompt": "photorealistic glowing cyberpunk robot, 8k", "effect": "cyberpunk_color"}],
   "youtubeTitle": "Max 70 chars. High energy. 1 emoji. Include #shorts.",
-  "youtubeDescription": "Tanglish description following exact structure above.",
+  "youtubeDescription": "English-only description following exact structure above.",
   "tags": ["array", "of", "6-10", "relevant", "keyword", "strings"]
 }
 
@@ -67,7 +67,7 @@ CRITICAL INSTRUCTION: You MUST output ONLY valid JSON. Your output must strictly
     { "type": "image", "prompt": "cyberpunk city neon lights programmer looking at future", "effect": "cyberpunk_color" }
   ],
   "youtubeTitle": "Is AI replacing programmers? \uD83D\uDEA8 #shorts #coding #ai",
-  "youtubeDescription": "Eppudaina chusara? AI is changing the game for software developers. Here is what you need to know to survive the coding apocalypse.\n\n\u2022 AI agents are now writing full-stack code.\n\u2022 Syntax is dead. System Design is king.\n\u2022 Adapt or get left behind.\n\nVibecoder Daily ki subscribe cheyyandi future tech updates kosam!\n\n#AITech, #CodingShorts, #SoftwareEngineering, #TechNews, #Vibecoder, #Programming, #AIAgents, #FutureTech, #LearnToCode, #Shorts",
+  "youtubeDescription": "Did you know AI is now writing full-stack code? Here is what every developer needs to know right now.\n\n\u2022 AI agents are hunting bugs and writing tests automatically.\n\u2022 Syntax is dead. System Design is king.\n\u2022 The developers who direct AI will replace those who compete with it.\n\nSubscribe to Vibecoder Daily for more tech updates!\n\n#AITech #CodingShorts #SoftwareEngineering #TechNews #Vibecoder #Programming #AIAgents #FutureTech #LearnToCode #Shorts",
   "tags": ["ai", "coding", "software engineering", "tech news", "vibecoder", "programming", "ai agents", "future tech"]
 }
 === END OF EXAMPLE ===
