@@ -14,6 +14,7 @@ async function generateScript(topic) {
   const systemPrompt = `You are a viral YouTube Shorts creator. 
 Topic: ${topic}. 
 Generate a 45-second script (max 115 words), 8 cinematic visual prompts for Veo 3.1, a YouTube title, and 10 tags. 
+CRITICAL: Do NOT include humans, faces, or specific people in the visual prompts. Focus only on abstract technology, nature, architecture, or objects. Use cinematic descriptions like 'Macro shot of glowing circuits' or 'Nebula clouds moving in space'.
 Return ONLY raw JSON in this exact structure:
 {
   "title": "High energy YouTube title",

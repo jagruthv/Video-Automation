@@ -192,7 +192,17 @@ async function acquireImage(prompt, outputPath, sceneIndex) {
 async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
   try {
     log.info(`Scene ${sceneIndex}: Google Veo 3.1 → "${query}"`);
-    const provider = await withRetry(() => fetchVeoVideo(query, videoPath), { maxRetries: 1, name: `veo-video-${sceneIndex}` });
+    const provider = await withRetry(async () => {
+      try {
+        return await fetchVeoVideo(query, videoPath);
+      } catch (veoErr) {
+        if (veoErr.message && (veoErr.message.includes('PROMINENT_PEOPLE_FILTER_FAILED') || veoErr.message.includes('INVALID_ARGUMENT'))) {
+          log.warn(`⚠️ Veo safety filter triggered. Switching to abstract fallback.`);
+          return await fetchVeoVideo("Abstract digital data visualization.", videoPath);
+        }
+        throw veoErr;
+      }
+    }, { maxRetries: 1, name: `veo-video-${sceneIndex}` });
     return { path: videoPath, type: 'video', provider, attribution: 'Video by Google Veo' };
   } catch (err) {
     log.warn(`Scene ${sceneIndex}: Google Veo 3.1 failed. Falling back to Pexels Video...`);
