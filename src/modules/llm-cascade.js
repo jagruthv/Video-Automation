@@ -166,176 +166,71 @@ async function recordProviderResult(providerName, success) {
 }
 
 // ============================================================
-// PROVIDER DEFINITIONS (corrected endpoints and limits)
+// PROVIDER DEFINITIONS & CORE ROUTING LOGIC
 // ============================================================
 
-const providers = [
-  // TIER 1: Best reasoning — Gemini 2.5 Pro
-  {
-    name: 'gemini-2.5-pro',
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.GEMINI_API_KEY;
-      if (!key) throw new Error('GEMINI_API_KEY not set');
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${key}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" } }),
-        signal: AbortSignal.timeout(40000)
-      });
-      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      return data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    }
-  },
-  // TIER 2: Groq Llama 3.3 70B — fastest quality
-  {
-    name: 'groq-llama-3.3-70b',
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.GROQ_API_KEY;
-      if (!key) throw new Error('GROQ_API_KEY not set');
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
-        signal: AbortSignal.timeout(30000)
-      });
-      if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content;
-    }
-  },
-  // TIER 3: Gemini 2.5 Flash — fast free tier
-  {
-    name: 'gemini-2.5-flash',
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.GEMINI_API_KEY;
-      if (!key) throw new Error('GEMINI_API_KEY not set');
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" } }),
-        signal: AbortSignal.timeout(30000)
-      });
-      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      return data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    }
-  },
-  // TIER 4: Gemini 2.0 Flash — stable production model
-  {
-    name: 'gemini-2.0-flash',
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.GEMINI_API_KEY;
-      if (!key) throw new Error('GEMINI_API_KEY not set');
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" } }),
-        signal: AbortSignal.timeout(30000)
-      });
-      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      return data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    }
-  },
-  // TIER 5: Cerebras Llama 3.3 70B — ultra-fast inference
-  {
-    name: 'cerebras-llama-3.3-70b',
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.CEREBRAS_API_KEY;
-      if (!key) throw new Error('CEREBRAS_API_KEY not set');
-      const res = await fetch('https://api.cerebras.ai/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({ model: 'llama-3.3-70b', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
-        signal: AbortSignal.timeout(30000)
-      });
-      if (!res.ok) throw new Error(`Cerebras HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content;
-    }
-  },
-  // TIER 6: Groq QwQ 32B — strong reasoning
-  {
-    name: 'groq-qwq-32b',
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.GROQ_API_KEY;
-      if (!key) throw new Error('GROQ_API_KEY not set');
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({ model: 'qwen-qwq-32b', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
-        signal: AbortSignal.timeout(30000)
-      });
-      if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content;
-    }
-  },
-  // TIER 7: Groq Llama 3.1 70B — reliable older fallback
-  {
-    name: 'groq-llama-3.1-70b',
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.GROQ_API_KEY;
-      if (!key) throw new Error('GROQ_API_KEY not set');
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({ model: 'llama-3.1-70b-versatile', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
-        signal: AbortSignal.timeout(30000)
-      });
-      if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content;
-    }
-  },
-  // TIER 8: OpenRouter DeepSeek R1 (free)
-  {
-    name: 'openrouter-deepseek-r1',
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.OPENROUTER_API_KEY;
-      if (!key) throw new Error('OPENROUTER_API_KEY not set');
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'HTTP-Referer': 'https://aura-bot.dev', 'X-Title': 'AURA' },
-        body: JSON.stringify({ model: 'deepseek/deepseek-r1:free', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
-        signal: AbortSignal.timeout(45000)
-      });
-      if (!res.ok) throw new Error(`OpenRouter HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content;
-    }
-  },
-  // TIER 9: GitHub Models GPT-4o
-  {
-    name: 'github-models-gpt4o',
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.GITHUB_MODELS_TOKEN;
-      if (!key) throw new Error('GITHUB_MODELS_TOKEN not set');
-      const res = await fetch('https://models.inference.ai.azure.com/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
-        signal: AbortSignal.timeout(30000)
-      });
-      if (!res.ok) throw new Error(`GitHub Models HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content;
-    }
-  },
-  // TIER 10: Mistral Small — last resort
-  {
-    name: 'mistral-small',
-    async generate(systemPrompt, userPrompt) {
-      const key = process.env.MISTRAL_API_KEY;
-      if (!key) throw new Error('MISTRAL_API_KEY not set');
-      const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        body: JSON.stringify({ model: 'mistral-small-latest', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], temperature: 0.9, max_tokens: 2048, response_format: { type: "json_object" } }),
-        signal: AbortSignal.timeout(30000)
-      });
-      if (!res.ok) throw new Error(`Mistral HTTP ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      return data?.choices?.[0]?.message?.content;
-    }
-  }
+const modelCascade = [
+  { provider: 'groq', id: 'openai/gpt-oss-120b' },
+  { provider: 'groq', id: 'llama-3.3-70b-versatile' },
+  { provider: 'gemini', id: 'gemini-3-flash' },
+  { provider: 'gemini', id: 'gemini-2.5-flash' },
+  { provider: 'groq', id: 'qwen/qwen3-32b' },
+  { provider: 'groq', id: 'openai/gpt-oss-20b' },
+  { provider: 'groq', id: 'meta-llama/llama-4-scout-17b-16e-instruct' },
+  { provider: 'groq', id: 'llama-3.1-8b-instant' },
+  { provider: 'gemini', id: 'gemini-3.1-flash-lite' },
+  { provider: 'gemini', id: 'gemini-2.5-flash-lite' }
 ];
 
+async function generateLlmResponse(provider, modelId, systemPrompt, userPrompt) {
+  if (provider === 'groq') {
+    const key = process.env.GROQ_API_KEY;
+    if (!key) throw new Error('GROQ_API_KEY not set');
+    
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({ 
+        model: modelId, 
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], 
+        temperature: 0.9, 
+        max_tokens: 2048, 
+        response_format: { type: "json_object" } 
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+    
+    if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    return data?.choices?.[0]?.message?.content;
+  } 
+  
+  if (provider === 'gemini') {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) throw new Error('GEMINI_API_KEY not set');
+    
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`, {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], 
+        generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" } 
+      }),
+      signal: AbortSignal.timeout(40000)
+    });
+    
+    if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  }
+  
+  throw new Error(`Unknown provider: ${provider}`);
+}
+
 /**
- * Generate a video script using the 6-model LLM cascade.
+ * Generate a video script using the 10-model LLM cascade.
  * Tries each provider in order. If one fails, instantly tries next.
- * NEVER fails unless ALL 6 providers are down.
+ * NEVER fails unless ALL 10 models are down or exhausted.
  *
  * @param {string} topic - The trending topic
  * @param {string} verticalId - Content vertical
@@ -352,8 +247,10 @@ async function generateScript(topic, verticalId, channelPersona, topicMeta = {})
     topicMeta.viralityScore || 50
   );
 
-  for (const provider of providers) {
-    if (await shouldSkipProvider(provider.name)) continue;
+  for (const model of modelCascade) {
+    const identifier = `${model.provider}-${model.id}`;
+    
+    if (await shouldSkipProvider(identifier)) continue;
 
     let lastError = null;
     for (let attempt = 1; attempt <= 2; attempt++) {
@@ -362,28 +259,28 @@ async function generateScript(topic, verticalId, channelPersona, topicMeta = {})
           ? baseUserPrompt 
           : `${baseUserPrompt}\n\nCRITICAL FEEDBACK: Your previous attempt failed validation: "${lastError}". Please fix the JSON and ensure the script is 80-100 words AS STRICTLY REQUESTED.`;
 
-        log.info(`Trying ${provider.name} (attempt ${attempt}/2)...`);
-        const rawText = await provider.generate(systemPrompt, userPrompt);
+        log.info(`Trying ${identifier} (attempt ${attempt}/2)...`);
+        const rawText = await generateLlmResponse(model.provider, model.id, systemPrompt, userPrompt);
 
         if (!rawText) throw new Error('Empty response');
 
         const parsed = parseScriptJSON(rawText);
         if (!validateScript(parsed)) throw new Error('Invalid script structure or length requirements not met');
 
-        await recordProviderResult(provider.name, true);
-        log.info(`Script generated via ${provider.name} — "${parsed.youtube_title}"`);
-        return { script: parsed, provider: provider.name };
+        await recordProviderResult(identifier, true);
+        log.info(`Script generated via ${identifier} — "${parsed.youtube_title}"`);
+        return { script: parsed, provider: identifier };
       } catch (err) {
         lastError = err.message;
-        log.warn(`${provider.name} attempt ${attempt} failed: ${err.message}`);
+        log.warn(`${identifier} attempt ${attempt} failed: ${err.message}`);
         
         if (err.message.includes('404') || err.message.includes('429') || err.message.includes('not set')) {
-          break;
+          break; // Skip retry and move to next model if API key issue or rate limit
         }
         
         if (attempt === 2) {
-          await recordProviderResult(provider.name, false);
-          log.warn(`${provider.name} exhausted. Moving to next provider...`);
+          await recordProviderResult(identifier, false);
+          log.warn(`${identifier} exhausted. Moving to next provider...`);
         }
       }
     }
@@ -392,4 +289,4 @@ async function generateScript(topic, verticalId, channelPersona, topicMeta = {})
   throw new Error('ALL_LLM_PROVIDERS_EXHAUSTED — no script could be generated');
 }
 
-module.exports = { generateScript, providers, buildSystemPrompt, buildUserPrompt, validateScript };
+module.exports = { generateScript, modelCascade, buildSystemPrompt, buildUserPrompt, validateScript };
