@@ -55,10 +55,7 @@ jobs:
         run: npm ci
 
       - name: Install FFmpeg
-        uses: FedericoCarboni/setup-ffmpeg@v3
-        with:
-          ffmpeg-version: release
-          architecture: x64
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Validate environment
         run: node scripts/validate-env.js
