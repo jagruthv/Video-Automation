@@ -75,8 +75,9 @@ async function main() {
         const schedule = await getOrCreateTodaySchedule(channel.accountId);
         const now = new Date();
         const nextSlot = schedule.find(s => !s.used && s.time <= now);
+        const forceNow = process.argv.includes('--force-now');
 
-        if (!nextSlot) {
+        if (!forceNow && !nextSlot) {
           const futureSlots = schedule.filter(s => !s.used && s.time > now);
           if (futureSlots.length > 0) {
             log.info(`${channel.accountId}: No slot ready now. Next at ${futureSlots[0].time.toISOString()}`);
@@ -86,7 +87,11 @@ async function main() {
           continue;
         }
 
-        log.info(`Upload slot available: ${nextSlot.time.toISOString()}`);
+        if (forceNow) {
+          log.info(`Upload slot forcefully bypassed via --force-now flag.`);
+        } else {
+          log.info(`Upload slot available: ${nextSlot.time.toISOString()}`);
+        }
 
         // 4. Get next video job (manual task or auto-discovery)
         const recentTopics = channel.stats && channel.stats.recentTopics ? channel.stats.recentTopics : [];
