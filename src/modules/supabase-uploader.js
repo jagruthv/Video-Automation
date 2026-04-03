@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 const { createClient } = require('@supabase/supabase-js');
 const { getModuleLogger } = require('../utils/logger');
 const log = getModuleLogger('supabase-uploader');
@@ -11,19 +12,12 @@ console.log('DEBUG: SUPABASE_URL starts with:', process.env.SUPABASE_URL ? proce
 
 let supabase;
 try {
-  // Use a standard fetch wrapper for regular DB operations
+  // Use standard init for database queries
   supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_KEY,
     {
       auth: { persistSession: false },
-      global: {
-        fetch: (url, options = {}) => {
-          options.duplex = 'half'; // Required for Node 20+ stream/buffer
-          options.signal = AbortSignal.timeout(120000); 
-          return fetch(url, options);
-        }
-      }
     }
   );
 } catch (err) {
@@ -46,39 +40,59 @@ async function uploadToStaging(videoPath, metadata) {
 
     log.info(`📦 Uploading 25MB+ payload to Supabase... Standby. (Path: ${storagePath})`);
 
-    // REST API Endpoint specifically bypassing SDK bugs
-    const uploadUrl = `${process.env.SUPABASE_URL}/storage/v1/object/aura_videos/${storagePath}`;
-    
-    // Debug log to print the entire URL it's trying to hit
-    log.info(`[DEBUG] Attempting REST PUT to URL: ${uploadUrl}`);
+    // Action B: Strictly sanitize the secrets
+    const cleanUrl = process.env.SUPABASE_URL.trim().replace(/\/$/, '');
+    const cleanKey = process.env.SUPABASE_SERVICE_KEY.trim();
 
-    // Wrap the REST upload in a retry loop (3 attempts)
+    // Action C: Replace fetch() with a Promise-wrapped https.request
+    const parsedUrl = new URL(cleanUrl + '/storage/v1/object/aura_videos/' + storagePath);
+    log.info(`[DEBUG] Attempting native HTTPS PUT to URL: ${parsedUrl.toString()}`);
+
     let uploadError = null;
     let success = false;
     
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const uploadRes = await fetch(uploadUrl, {
-          method: 'POST', // Supabase requires POST or PUT depending on endpoints, but storage insert is typically POST to upload, HTTP PUT for standard object insert
-          // Wait, user specified: "use a standard fetch() PUT request to the Supabase REST endpoint"
-          method: 'PUT',
-          headers: {
-            'Authorization': 'Bearer ' + process.env.SUPABASE_SERVICE_KEY,
-            'Content-Type': 'video/mp4',
-            'x-upsert': 'true'
-          },
-          body: fileBuffer,
-          duplex: 'half', // Keeps Node 20 safe
-          signal: AbortSignal.timeout(120000)
-        });
+        await new Promise((resolve, reject) => {
+          const options = {
+            hostname: parsedUrl.hostname,
+            port: parsedUrl.port || 443,
+            path: parsedUrl.pathname + parsedUrl.search,
+            method: 'PUT',
+            headers: {
+              'Authorization': 'Bearer ' + cleanKey,
+              'Content-Type': 'video/mp4',
+              'Content-Length': Buffer.byteLength(fileBuffer),
+              'x-upsert': 'true'
+            },
+            timeout: 120000 // 120 seconds
+          };
 
-        if (!uploadRes.ok) {
-          const errText = await uploadRes.text();
-          uploadError = new Error(`HTTP ${uploadRes.status}: ${errText}`);
-        } else {
-          success = true;
-          break; // Upload passed!
-        }
+          const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                resolve();
+              } else {
+                reject(new Error(`HTTP ${res.statusCode}: ${body}`));
+              }
+            });
+          });
+
+          req.on('error', (e) => reject(e));
+          req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('HTTPS connection timed out after 120s'));
+          });
+
+          // Write the buffer directly to the request socket
+          req.write(fileBuffer);
+          req.end();
+        });
+        
+        success = true;
+        break; // Upload passed!
       } catch (err) {
         uploadError = err;
       }
@@ -93,7 +107,7 @@ async function uploadToStaging(videoPath, metadata) {
       throw new Error(`Storage upload critically failed after 3 attempts: ${uploadError?.message}`);
     }
 
-    // Action B: Retrieve Public URL
+    // Action D: Keep the aura_queue database insert using the SDK at the end.
     const { data: urlData } = supabase.storage
       .from('aura_videos')
       .getPublicUrl(storagePath);
@@ -101,7 +115,6 @@ async function uploadToStaging(videoPath, metadata) {
     const videoUrl = urlData?.publicUrl;
     if (!videoUrl) throw new Error('Failed to retrieve public URL from Supabase.');
 
-    // Action C: Insert into aura_queue table
     const queueRow = {
       title: metadata.title || 'Untitled',
       tags: metadata.tags || [],
