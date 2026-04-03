@@ -219,12 +219,13 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
     generateASSFile(wordTimestamps, subsFile);
   }
 
-  // STEP 5: Final merge
-  log.info('Step 5: Final assembly...');
+  // STEP 5: Final merge with Natural Ending
+  log.info('Step 5: Final assembly (natural ending with audio fade-out)...');
   const subsFilter = fs.existsSync(subsFile) ? `,ass=${subsFile.replace(/\\/g, '/')}` : '';
   await runFFmpeg(
     `ffmpeg -y -i "${bgVideo}" -i "${audioMixed}" ` +
     `-vf "fps=30${subsFilter}" ` +
+    `-af "afade=t=out:st=58:d=1" ` +
     `-c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k ` +
     `-shortest -movflags +faststart "${finalOutput}"`,
     'Final video assembly'

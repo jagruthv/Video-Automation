@@ -11,19 +11,20 @@ const log = getModuleLogger('llm-cascade');
  * The LLM acts as Art Director, choosing visuals and FFmpeg effects.
  * @returns {string}
  */
-function buildSystemPrompt() {
+function buildSystemPrompt(vibe = 'Curiosity') {
   return `You are 'The Vibecoder', a highly energetic Gen-Z tech YouTuber AND an AI Art Director for YouTube Shorts.
 
 SCRIPT RULES:
-1. Hook the viewer in 3 seconds. Start with "Stop scrolling!" or "Wait — don't swipe!" then drop a mind-blowing fact.
-2. NO STAGE DIRECTIONS. No brackets, asterisks, timestamps. ONLY spoken words.
-3. PACING IS CRITICAL. DO NOT USE COMMAS. Every single thought ends with a full stop on its own line.
+1. Hook the viewer in 3 seconds using the following Vibe Archetype: [${vibe}]. Adapt your tone exactly to this vibe!
+2. NO CLICHÉS. You are strictly FORBIDDEN from using phrases like "Follow for more", "Stop scrolling", or "In this video".
+3. NO STAGE DIRECTIONS. No brackets, asterisks, timestamps. ONLY spoken words.
+4. PACING IS CRITICAL. DO NOT USE COMMAS. Every single thought ends with a full stop on its own line.
    BAD: 'This AI is crazy, it codes for you, and it is free.'
    GOOD:
    'This AI is crazy.'
    'It codes for you.'
    'And it is completely free.'
-4. End with a benefit-driven CTA: "Subscribe to Vibecoder Daily to stay ahead of 99% of coders."
+5. End with a value-based CTA: e.g., "Check the link in the bio if you are tired of slow builds." or "Subscribe to Vibecoder Daily to stay ahead of 99 percent of coders."
 
 VISUAL SEQUENCE RULES:
 You must direct a sequence of 6 to 8 visual scenes that perfectly match the script.
@@ -33,7 +34,7 @@ VIDEO EFFECT RULES:
 For EVERY scene (whether video or image), pick EXACTLY ONE effect from this list: zoom_in, pan_right, cyberpunk_color, bw_hacker, glitch.
 
 LENGTH REQUIREMENT:
-Your script MUST be between 85 and 130 words. Explain the technical concepts in deep detail. If you write less than 85 words or more than 130 words, the system will crash.
+Your script MUST be between 85 and 115 words. Explain the technical concepts in deep detail. Do not exceed 115 words. The script must naturally conclude within this limit. If you write less than 85 words or more than 115 words, the system will crash.
 The video must be visually engaging and precisely paced for YouTube Shorts.
 
 DESCRIPTION RULES:
@@ -49,7 +50,7 @@ When defining a "query" for a "video" visual, keep in mind videos are only a few
 
 OUTPUT FORMAT: Respond ONLY with a single valid JSON object. No markdown fences. No explanation:
 {
-  "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only. MUST be between 85 and 130 words.",
+  "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only. MUST be between 85 and 115 words.",
   "visuals": [{"type": "video", "query": "hacker typing", "effect": "zoom_in"}, {"type": "image", "prompt": "photorealistic glowing cyberpunk robot, 8k", "effect": "cyberpunk_color"}],
   "youtubeTitle": "Max 70 chars. High energy. 1 emoji. Include #shorts.",
   "youtubeDescription": "English-only description following exact structure above.",
@@ -81,14 +82,15 @@ CRITICAL: Output ONLY a raw, valid JSON object. Do not include any conversationa
 /**
  * Build the user prompt.
  */
-function buildUserPrompt(topic, source, sourceUrl, viralityScore) {
+function buildUserPrompt(topic, source, sourceUrl, viralityScore, vibe = 'Curiosity') {
   return `Today's trending topic: "${topic}"
 Source: ${source}
 Source URL: ${sourceUrl}
 Virality Score: ${viralityScore}/100
+Hook Archetype to use: ${vibe}
 
 You are the Vibecoder AI Director. Output the JSON object now.
-RULE: Your script MUST be between 85 and 130 words. Explain technical concepts in deep detail without being wordy. If you fail the word count constraints, the system will crash.
+RULE: Your script MUST be between 85 and 115 words. Explain technical concepts in deep detail without being wordy. Do not exceed 115 words. The script must naturally conclude within this limit. If you fail the word count constraints, the system will crash.
 No markdown. No explanation. Start your response with { and end with }.`;
 }
 
@@ -129,13 +131,13 @@ function validateScript(script) {
   if (!script || typeof script !== 'object') return false;
   if (!script.script) return false;
 
-  // Enforce 85-130 word limits — triggers feedback retry on lazy or verbose LLMs
+  // Enforce 85-115 word limits — triggers feedback retry on lazy or verbose LLMs
   const wordCount = script.script.split(/\s+/).filter(w => w.length > 0).length;
   if (wordCount < 85) {
     throw new Error(`Script length validation failed: Only ${wordCount} words (minimum 85 strictly required). Expand the technical details.`);
   }
-  if (wordCount > 130) {
-    throw new Error(`Script length validation failed: ${wordCount} words is TOO LONG (maximum 130 words allowed for YouTube Shorts). Please shorten it to be punchy.`);
+  if (wordCount > 115) {
+    throw new Error(`Script length validation failed: ${wordCount} words is TOO LONG (maximum 115 words allowed for YouTube Shorts). Please shorten it to be punchy.`);
   }
 
   // Validate all required structural fields
@@ -273,12 +275,17 @@ async function generateLlmResponse(provider, modelId, systemPrompt, userPrompt) 
  * @returns {Promise<{script: Object, provider: string}>}
  */
 async function generateScript(topic, verticalId, channelPersona, topicMeta = {}, extraFeedback = null) {
-  const systemPrompt = buildSystemPrompt();
+  const vibes = ['Challenger', 'Curiosity', 'Weird', 'Insider', 'Problem/Solution'];
+  const selectedVibe = vibes[Math.floor(Math.random() * vibes.length)];
+  log.info(`Vibe Selector chose archetype: [${selectedVibe}]`);
+
+  const systemPrompt = buildSystemPrompt(selectedVibe);
   const baseUserPrompt = buildUserPrompt(
     topic,
     topicMeta.source || 'auto-discovered',
     topicMeta.sourceUrl || '',
-    topicMeta.viralityScore || 50
+    topicMeta.viralityScore || 50,
+    selectedVibe
   );
 
   for (const model of modelCascade) {

@@ -38,8 +38,8 @@ async function fetchVeoVideo(query, outputPath) {
     const images = await whisk.generateImage(query, 1);
     if (!images || images.length === 0) throw new Error("Veo Phase 1: Image Generation Failed");
     
-    // Phase 2: Animate (The prompt is optimized below by the LLM, we append a transition helper)
-    const animScript = `Cinematic slow, smooth transition for: ${query}. Perfect loop lighting.`;
+    // Phase 2: Animate (Appended with the Director Prompt suffix for high-engagement visuals)
+    const animScript = `${query}, Cinematic, 4k, macro photography, dramatic side-lighting, moving particles, and high-motion dynamics.`;
     const video = await images[0].animate(animScript, VEO_MODELS);
     
     // Phase 3: Transfer to pipeline location
@@ -264,4 +264,29 @@ async function acquireVisuals(scriptJson, targetDurationMs, outputDir = '/tmp/bu
   return { clips, provider: 'hybrid', attributions };
 }
 
-module.exports = { acquireVisuals };
+/**
+ * Generate a high-impact Hero Image (9:16 vertical) to act as an automated thumbnail.
+ * Powered purely by Pollinations (no API key needed, unlimited).
+ */
+async function generateHeroThumbnail(topic, outputPath) {
+  const prompt = `High-contrast, vibrant colors, minimal background, glowing centered tech icon, 9:16, ultra-detailed ${topic}`;
+  log.info(`Generating Hero Thumbnail for: "${topic}"...`);
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1920&nologo=true`;
+  
+  try {
+    await withRetry(
+      () => downloadFile(url, outputPath),
+      { maxRetries: 2, name: 'hero-thumbnail', baseDelay: 2000 }
+    );
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 10000) {
+      log.info(`✅ Hero Thumbnail generated: ${outputPath}`);
+      return true;
+    }
+    throw new Error('Downloaded thumbnail was a placeholder or corrupted size.');
+  } catch (err) {
+    log.error(`Hero Thumbnail generation failed: ${err.message}`);
+    return false;
+  }
+}
+
+module.exports = { acquireVisuals, generateHeroThumbnail };
