@@ -57,7 +57,7 @@ jobs:
       - name: Install FFmpeg (Quiet Mode)
         env:
           DEBIAN_FRONTEND: noninteractive
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+        run: sudo apt-get update > /dev/null 2>&1 && sudo apt-get install -y ffmpeg > /dev/null 2>&1
 
       - name: Validate environment
         run: node scripts/validate-env.js
