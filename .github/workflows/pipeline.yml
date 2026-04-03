@@ -54,8 +54,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg (Quiet Mode)
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
 
       - name: Validate environment
         run: node scripts/validate-env.js
@@ -96,3 +98,11 @@ jobs:
           FORCE_NOW: ${{ github.event.inputs.force_now || 'false' }}
           UPLOAD_WINDOW_START_HOUR: '8'
           UPLOAD_WINDOW_END_HOUR: '23'
+
+      - name: Catch Video Artifact (For Dry Runs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-test-video
+          path: /tmp/build/output/*.mp4
+          retention-days: 1
