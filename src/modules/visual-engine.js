@@ -219,30 +219,34 @@ async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
 async function acquireVisuals(scriptJson, targetDurationMs, outputDir = '/tmp/build/clips') {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-  const visualsArray = scriptJson.visuals || [
-    { type: 'image', prompt: 'Cyberpunk hacker typing furiously', effect: 'zoom_in' },
-    { type: 'video', query: 'matrix code', effect: 'pan_right' },
-    { type: 'image', prompt: 'holographic neon sign', effect: 'glitch' }
-  ];
+  const visualsArray = Array.isArray(scriptJson.visuals) ? scriptJson.visuals : (scriptJson.visuals?.clips || []);
+  
+  if (visualsArray.length === 0) {
+    log.warn('No visuals found in script JSON, using default tech prompts.');
+    visualsArray.push('Cyberpunk hacker typing furiously', 'Quantum computer glowing blue', 'holographic neon sign');
+  }
 
   log.info(`Acquiring ${visualsArray.length} hybrid visual scenes...`);
   const clips = [];
 
   for (let i = 0; i < visualsArray.length; i++) {
     const item = visualsArray[i];
-    const effect = item.effect || 'zoom_in';
+    
+    // Support both new V2 (strings) and old V1 (objects)
+    const query = typeof item === 'string' ? item : (item.query || item.prompt || 'technology');
+    const effect = typeof item === 'string' ? 'zoom_in' : (item.effect || 'zoom_in');
+    const type = typeof item === 'string' ? 'video' : (item.type || 'video');
 
     try {
-      if (item.type === 'video') {
+      if (type === 'video') {
         const videoPath = path.join(outputDir, `scene_${i}.mp4`);
         const imgFallbackPath = path.join(outputDir, `scene_${i}.jpg`);
-        const result = await acquireVideo(item.query || item.prompt || 'technology', videoPath, imgFallbackPath, i + 1);
+        const result = await acquireVideo(query, videoPath, imgFallbackPath, i + 1);
         clips.push({ ...result, effect, durationMs: 0 });
         log.info(`Scene ${i + 1}/${visualsArray.length} acquired: ${result.type} (${result.provider})`);
       } else {
         const imgPath = path.join(outputDir, `scene_${i}.jpg`);
-        const prompt = item.prompt || item.query || 'futuristic technology';
-        const { provider, attribution } = await acquireImage(prompt, imgPath, i + 1);
+        const { provider, attribution } = await acquireImage(query, imgPath, i + 1);
         clips.push({ path: imgPath, type: 'image', effect, provider, attribution, durationMs: 0 });
         log.info(`Scene ${i + 1}/${visualsArray.length} acquired: image (${provider})`);
       }
