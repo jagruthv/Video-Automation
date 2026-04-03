@@ -36,11 +36,14 @@ async function main() {
     log.info('Audio and visual assets successfully generated.');
 
     // 3. FFmpeg Assembly
-    log.info('Assembling final video via FFmpeg...');
+    log.info('Assembling final video via FFmpeg (with dynamic scene looping enabled)...');
+    
+    // Pass loopVisuals: true so that even if only 1 scene is acquired, it will loop indefinitely until audio ends.
     const assembly = await assembleVideo(
       tmpManager.subpath('audio', 'voice.mp3'),
       visualsResult.clips || visualsResult,
-      voiceResult.wordTimestamps
+      voiceResult.wordTimestamps,
+      { loopVisuals: true }
     );
     log.info(`Video successfully assembled at ${assembly.videoPath}`);
 

@@ -7,12 +7,11 @@ const { withRetry } = require('../utils/retry');
 
 const log = getModuleLogger('visual-engine');
 
-const VISUAL_TIMEOUT_MS = 60000; // 60s — Pollinations AI generation needs patience
+const VISUAL_TIMEOUT_MS = 60000;
+const POLLINATIONS_COOLDOWN_MS = 5000;
 
-/**
- * Download a file from URL to local path.
- * Uses a 60s timeout to allow AI image generation to complete.
- */
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 async function downloadFile(url, outputPath) {
   const res = await fetch(url, { signal: AbortSignal.timeout(VISUAL_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status} from ${url}`);
@@ -22,10 +21,6 @@ async function downloadFile(url, outputPath) {
   fs.writeFileSync(outputPath, buffer);
 }
 
-/**
- * Fetch an AI-generated video via Google Veo 3.1 (Whisk API)
- * Timeout managed internally by API or by manual retry limits.
- */
 async function fetchVeoVideo(query, outputPath) {
   if (!process.env.GOOGLE_WHISK_COOKIE) throw new Error('GOOGLE_WHISK_COOKIE not set, skipping Veo');
   
@@ -34,15 +29,12 @@ async function fetchVeoVideo(query, outputPath) {
     const whisk = new Whisk(process.env.GOOGLE_WHISK_COOKIE);
     const VEO_MODELS = "VEO_3_1_I2V_12STEP";
     
-    // Phase 1: Base Image
     const images = await whisk.generateImage(query, 1);
     if (!images || images.length === 0) throw new Error("Veo Phase 1: Image Generation Failed");
     
-    // Phase 2: Animate (Appended with the Director Prompt suffix for high-engagement visuals)
     const animScript = `${query}, Cinematic, 4k, macro photography, dramatic side-lighting, moving particles, and high-motion dynamics.`;
     const video = await images[0].animate(animScript, VEO_MODELS);
     
-    // Phase 3: Transfer to pipeline location
     const tempDir = path.dirname(outputPath);
     const tempPath = video.save(tempDir);
     fs.copyFileSync(tempPath, outputPath);
@@ -54,9 +46,6 @@ async function fetchVeoVideo(query, outputPath) {
   }
 }
 
-/**
- * Smart Keyword Extraction for Stock APIs — strips filler words, takes first 3 meaningful terms.
- */
 function extractKeywords(prompt) {
   let cleaned = (prompt || '').replace(/^(A|An|The)\s+/i, '');
   cleaned = cleaned.split(',')[0].trim();
@@ -64,10 +53,6 @@ function extractKeywords(prompt) {
   return words.slice(0, 3).join(' ');
 }
 
-/**
- * Fetch a Pexels Video (portrait orientation, HD quality).
- * Timeout: 60s.
- */
 async function fetchPexelsVideo(query, outputPath) {
   if (!process.env.PEXELS_API_KEY) throw new Error('PEXELS_API_KEY not set');
   const res = await fetch(
@@ -86,21 +71,14 @@ async function fetchPexelsVideo(query, outputPath) {
   return 'Pexels Video';
 }
 
-/**
- * Fetch an AI-generated image from Pollinations.ai.
- * Timeout: 60s — give the AI time to render.
- */
 async function fetchPollinationsImage(prompt, outputPath) {
+  await delay(POLLINATIONS_COOLDOWN_MS); // 5s Cooldown block
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1920&nologo=true`;
   await downloadFile(url, outputPath);
-  if (fs.statSync(outputPath).size < 10000) throw new Error('Pollinations returned an image that is too small (likely placeholder)');
+  if (fs.existsSync(outputPath) && fs.statSync(outputPath).size < 10000) throw new Error('Pollinations image too small');
   return 'Pollinations.ai';
 }
 
-/**
- * Fetch a stock image from Pexels Images API.
- * Timeout: 60s.
- */
 async function fetchPexelsImage(query, outputPath) {
   if (!process.env.PEXELS_API_KEY) throw new Error('PEXELS_API_KEY not set');
   const res = await fetch(
@@ -118,10 +96,6 @@ async function fetchPexelsImage(query, outputPath) {
   return 'Pexels Image';
 }
 
-/**
- * Fetch a stock image from Pixabay API.
- * Timeout: 60s.
- */
 async function fetchPixabayImage(query, outputPath) {
   if (!process.env.PIXABAY_API_KEY) throw new Error('PIXABAY_API_KEY not set');
   const res = await fetch(
@@ -136,93 +110,63 @@ async function fetchPixabayImage(query, outputPath) {
   return 'Pixabay';
 }
 
-/**
- * IMAGE FALLBACK CASCADE:
- *   1. Pollinations AI (60s wait — best quality)
- *   2. Pexels Image stock  
- *   3. Pixabay stock
- */
 async function acquireImage(prompt, outputPath, sceneIndex) {
   const keywords = extractKeywords(prompt);
 
-  // PRIMARY: Pollinations AI image generation
   try {
     log.info(`Scene ${sceneIndex}: Pollinations AI → "${prompt.substring(0, 50)}..."`);
-    const provider = await withRetry(
-      () => fetchPollinationsImage(prompt, outputPath),
-      { maxRetries: 2, name: `pollinations-${sceneIndex}`, baseDelay: 3000 }
-    );
+    const provider = await withRetry(() => fetchPollinationsImage(prompt, outputPath), { maxRetries: 2, name: `pollinations-${sceneIndex}` });
     return { provider, attribution: 'Image by Pollinations.ai' };
   } catch (err) {
-    log.warn(`Scene ${sceneIndex}: Pollinations failed (${err.message}). Trying Pexels Image...`);
+    log.warn(`Scene ${sceneIndex}: Pollinations failed. Trying Pexels Image...`);
   }
 
-  // FALLBACK 1: Pexels stock image
   try {
     const provider = await fetchPexelsImage(keywords, outputPath);
     return { provider, attribution: 'Photo by Pexels' };
   } catch (err) {
-    log.warn(`Scene ${sceneIndex}: Pexels Image failed (${err.message}). Trying Pixabay...`);
+    log.warn(`Scene ${sceneIndex}: Pexels Image failed. Trying Pixabay...`);
   }
 
-  // FALLBACK 2: Pixabay stock image
   try {
     const provider = await fetchPixabayImage(keywords, outputPath);
     return { provider, attribution: 'Image by Pixabay' };
   } catch (err) {
-    log.error(`Scene ${sceneIndex}: All image providers failed. ${err.message}`);
-    throw new Error(`All image providers exhausted for scene ${sceneIndex}`);
+    log.error(`Scene ${sceneIndex}: All traditional image providers failed. Deploying invincible placeholder.`);
+    
+    // Extreme Fallback
+    const fallbackUrl = 'https://source.unsplash.com/1080x1920/?technology,abstract';
+    await downloadFile(fallbackUrl, outputPath);
+    return { provider: 'Unsplash Static Placeholder', attribution: 'Image by Unsplash' };
   }
 }
 
-/**
- * VIDEO FALLBACK CASCADE:
- *   1. Google Veo 3.1 (AI Video generation via Whisk)
- *   2. Pexels Video (portrait, HD stock)
- *   3. Pollinations AI image using query as prompt (graceful downgrade)
- */
 async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
-  // PRIMARY: Google Veo 3.1 (Whisk)
   try {
     log.info(`Scene ${sceneIndex}: Google Veo 3.1 → "${query}"`);
-    // Veo generation is incredibly slow, so 1 retry only, and very patient timeout (3-5 minutes natively).
-    const provider = await withRetry(
-      () => fetchVeoVideo(query, videoPath),
-      { maxRetries: 1, name: `veo-video-${sceneIndex}`, baseDelay: 10000 }
-    );
+    const provider = await withRetry(() => fetchVeoVideo(query, videoPath), { maxRetries: 1, name: `veo-video-${sceneIndex}` });
     return { path: videoPath, type: 'video', provider, attribution: 'Video by Google Veo' };
   } catch (err) {
-    log.warn(`Scene ${sceneIndex}: Google Veo 3.1 failed (${err.message}). Falling back to Pexels Video...`);
+    log.warn(`Scene ${sceneIndex}: Google Veo 3.1 failed. Falling back to Pexels Video...`);
   }
 
-  // FALLBACK 1: Pexels Video
   try {
     log.info(`Scene ${sceneIndex}: Pexels Video → "${query}"`);
-    const provider = await withRetry(
-      () => fetchPexelsVideo(query, videoPath),
-      { maxRetries: 2, name: `pexels-video-${sceneIndex}`, baseDelay: 2000 }
-    );
+    const provider = await withRetry(() => fetchPexelsVideo(query, videoPath), { maxRetries: 2, name: `pexels-video-${sceneIndex}` });
     return { path: videoPath, type: 'video', provider, attribution: 'Video by Pexels' };
   } catch (err) {
-    log.warn(`Scene ${sceneIndex}: Pexels Video failed (${err.message}). Falling back to Pollinations image...`);
+    log.warn(`Scene ${sceneIndex}: Pexels Video failed. Falling back to Pollinations image cascade...`);
   }
 
-  // FALLBACK 2: Pollinations AI image using the video query as image prompt
   const { provider, attribution } = await acquireImage(query, imageFallbackPath, sceneIndex);
   return { path: imageFallbackPath, type: 'image', provider, attribution };
 }
 
-/**
- * Master visual acquisition — serially fetches each scene with full fallback chains.
- * Returns clip metadata for the assembly engine.
- */
 async function acquireVisuals(scriptJson, targetDurationMs, outputDir = '/tmp/build/clips') {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
   const visualsArray = Array.isArray(scriptJson.visuals) ? scriptJson.visuals : (scriptJson.visuals?.clips || []);
-  
   if (visualsArray.length === 0) {
-    log.warn('No visuals found in script JSON, using default tech prompts.');
     visualsArray.push('Cyberpunk hacker typing furiously', 'Quantum computer glowing blue', 'holographic neon sign');
   }
 
@@ -231,8 +175,6 @@ async function acquireVisuals(scriptJson, targetDurationMs, outputDir = '/tmp/bu
 
   for (let i = 0; i < visualsArray.length; i++) {
     const item = visualsArray[i];
-    
-    // Support both new V2 (strings) and old V1 (objects)
     const query = typeof item === 'string' ? item : (item.query || item.prompt || 'technology');
     const effect = typeof item === 'string' ? 'zoom_in' : (item.effect || 'zoom_in');
     const type = typeof item === 'string' ? 'video' : (item.type || 'video');
@@ -240,53 +182,41 @@ async function acquireVisuals(scriptJson, targetDurationMs, outputDir = '/tmp/bu
     try {
       if (type === 'video') {
         const videoPath = path.join(outputDir, `scene_${i}.mp4`);
-        const imgFallbackPath = path.join(outputDir, `scene_${i}.jpg`);
-        const result = await acquireVideo(query, videoPath, imgFallbackPath, i + 1);
+        const imgPath = path.join(outputDir, `scene_${i}.jpg`);
+        const result = await acquireVideo(query, videoPath, imgPath, i + 1);
         clips.push({ ...result, effect, durationMs: 0 });
-        log.info(`Scene ${i + 1}/${visualsArray.length} acquired: ${result.type} (${result.provider})`);
       } else {
         const imgPath = path.join(outputDir, `scene_${i}.jpg`);
         const { provider, attribution } = await acquireImage(query, imgPath, i + 1);
         clips.push({ path: imgPath, type: 'image', effect, provider, attribution, durationMs: 0 });
-        log.info(`Scene ${i + 1}/${visualsArray.length} acquired: image (${provider})`);
       }
     } catch (err) {
-      log.error(`Scene ${i + 1} completely failed — skipping: ${err.message}`);
+      log.error(`Scene ${i + 1} processing error — skipping: ${err.message}`);
     }
   }
 
-  if (clips.length < 3) {
-    throw new Error(`VISUAL_ACQUISITION_FAILED: Only ${clips.length} scene(s) acquired — need at least 3.`);
+  // The Resilient Engine update: Proceed as long as we have literally any clips
+  if (clips.length === 0) {
+    throw new Error(`VISUAL_ACQUISITION_FAILED: Zero scenes acquired. Even placeholders failed.`);
   }
 
   const durationPerClip = Math.round(targetDurationMs / clips.length);
   clips.forEach(c => { c.durationMs = durationPerClip; });
 
-  log.info(`Visuals complete: ${clips.length} scenes, ~${Math.round(targetDurationMs / 1000)}s total divided equally.`);
+  log.info(`Visuals complete: ${clips.length} scenes acquired. Duration set to ~${Math.round(durationPerClip / 1000)}s each.`);
 
   const attributions = [...new Set(clips.map(c => c.attribution))];
   return { clips, provider: 'hybrid', attributions };
 }
 
-/**
- * Generate a high-impact Hero Image (9:16 vertical) to act as an automated thumbnail.
- * Powered purely by Pollinations (no API key needed, unlimited).
- */
 async function generateHeroThumbnail(topic, outputPath) {
   const prompt = `High-contrast, vibrant colors, minimal background, glowing centered tech icon, 9:16, ultra-detailed ${topic}`;
-  log.info(`Generating Hero Thumbnail for: "${topic}"...`);
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1920&nologo=true`;
   
   try {
-    await withRetry(
-      () => downloadFile(url, outputPath),
-      { maxRetries: 2, name: 'hero-thumbnail', baseDelay: 2000 }
-    );
-    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 10000) {
-      log.info(`✅ Hero Thumbnail generated: ${outputPath}`);
-      return true;
-    }
-    throw new Error('Downloaded thumbnail was a placeholder or corrupted size.');
+    await withRetry(() => downloadFile(url, outputPath), { maxRetries: 2, name: 'hero-thumbnail' });
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 10000) return true;
+    throw new Error('Placeholder generated');
   } catch (err) {
     log.error(`Hero Thumbnail generation failed: ${err.message}`);
     return false;
