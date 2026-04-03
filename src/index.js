@@ -181,7 +181,8 @@ async function main() {
           // Explicit mapping — works regardless of casing from any LLM
           youtube_title:       script.youtubeTitle       || script.youtube_title       || `${job.topic} #shorts`,
           youtube_description: script.youtubeDescription || script.youtube_description || '',
-          youtube_tags:        script.youtube_tags       || extractHashtags(script.youtubeDescription || script.youtube_description || ''),
+          // Prefer the LLM's explicit tags array, fall back to hashtag extraction from description
+          youtube_tags:        script.tags               || script.youtube_tags        || extractHashtags(script.youtubeDescription || script.youtube_description || ''),
           affiliateCTA:        affiliateData?.ctaForDescription || '',
           attributions:        visuals.attributions || []
         };

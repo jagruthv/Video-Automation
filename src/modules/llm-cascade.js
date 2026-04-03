@@ -49,8 +49,28 @@ OUTPUT FORMAT: Respond ONLY with a single valid JSON object. No markdown fences.
   "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only. MUST be minimum 100 words.",
   "visuals": [{"type": "video", "query": "hacker typing", "effect": "zoom_in"}, {"type": "image", "prompt": "photorealistic glowing cyberpunk robot, 8k", "effect": "cyberpunk_color"}],
   "youtubeTitle": "Max 70 chars. High energy. 1 emoji. Include #shorts.",
-  "youtubeDescription": "Tanglish description following exact structure above."
+  "youtubeDescription": "Tanglish description following exact structure above.",
+  "tags": ["array", "of", "6-10", "relevant", "keyword", "strings"]
 }
+
+CRITICAL INSTRUCTION: You MUST output ONLY valid JSON. Your output must strictly match the structure, length, and pacing of the following example. Notice how the script is long (over 100 words), uses short punchy sentences with full stops, and mixes both video and image visuals.
+
+=== EXAMPLE OUTPUT (COPY THIS STRUCTURE EXACTLY) ===
+{
+  "script": "Eppudaina chusara? The code you write today might be obsolete tomorrow. AI is coding faster than humans now. It is not just predicting text. It is building entire architectures. Imagine a world where you just type a prompt. A full-stack app deploys in seconds. That is exactly what OmX and Claude Code are doing right now. They act as autonomous agents. Hunting down bugs. Writing tests before you even blink. But do not panic. This does not mean software engineers are finished. It means we are evolving from bricklayers into architects. You need to stop memorizing syntax. Start mastering system design. The future belongs to those who direct the AI. Not those who compete with it. Subscribe to Vibecoder Daily for the latest tech survival guides.",
+  "visuals": [
+    { "type": "video", "query": "futuristic hacker typing fast", "effect": "zoom_in" },
+    { "type": "image", "prompt": "artificial intelligence glowing brain network 8k cinematic", "effect": "cyberpunk_color" },
+    { "type": "video", "query": "server room data center flashing lights", "effect": "pan_right" },
+    { "type": "image", "prompt": "holographic software architecture diagram floating in air", "effect": "glitch" },
+    { "type": "video", "query": "man looking stressed at computer screen", "effect": "bw_hacker" },
+    { "type": "image", "prompt": "cyberpunk city neon lights programmer looking at future", "effect": "cyberpunk_color" }
+  ],
+  "youtubeTitle": "Is AI replacing programmers? \uD83D\uDEA8 #shorts #coding #ai",
+  "youtubeDescription": "Eppudaina chusara? AI is changing the game for software developers. Here is what you need to know to survive the coding apocalypse.\n\n\u2022 AI agents are now writing full-stack code.\n\u2022 Syntax is dead. System Design is king.\n\u2022 Adapt or get left behind.\n\nVibecoder Daily ki subscribe cheyyandi future tech updates kosam!\n\n#AITech, #CodingShorts, #SoftwareEngineering, #TechNews, #Vibecoder, #Programming, #AIAgents, #FutureTech, #LearnToCode, #Shorts",
+  "tags": ["ai", "coding", "software engineering", "tech news", "vibecoder", "programming", "ai agents", "future tech"]
+}
+=== END OF EXAMPLE ===
 
 CRITICAL: Output ONLY a raw, valid JSON object. Do not include any conversational text before or after the JSON. No markdown formatting. No \`\`\`json fences. Start your response with { and end with }.`;
 }
