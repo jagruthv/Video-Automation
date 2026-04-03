@@ -2,22 +2,18 @@
   "name": "aura-video-automator",
   "version": "1.0.0",
   "description": "AURA - Autonomous Unified Reels Automator. AI-driven video content factory.",
-  "main": "src/index.js",
+  "main": "src/orchestrator/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
-    "dashboard:api": "node dashboard/api/server.js",
+    "start": "node src/orchestrator/index.js",
+    "dev": "nodemon src/orchestrator/index.js",
     "dashboard:dev": "cd dashboard && npm run dev",
-    "collect-metrics": "node src/modules/analytics-collector.js",
-    "competitor-check": "node src/modules/anti-flag-engine.js --mode=competitor-check",
-    "strip-old-scripts": "node scripts/strip-old-scripts.js",
     "test": "jest --coverage",
-    "validate-env": "node scripts/validate-env.js",
-    "setup-oauth": "node scripts/setup-youtube-oauth.js"
+    "validate-env": "node scripts/validate-env.js"
   },
   "dependencies": {
     "@rohitaryal/whisk-api": "^4.0.1",
+    "@supabase/supabase-js": "^2.101.1",
     "axios": "^1.7.0",
     "cheerio": "^1.0.0",
     "cors": "^2.8.5",
