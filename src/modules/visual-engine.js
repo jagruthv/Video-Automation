@@ -23,93 +23,164 @@ async function downloadFile(url, outputPath) {
 }
 
 // ============================================================
-// VEO 3.1 — The Primary Premium Engine
-// 180-second patient polling loop for MEDIA_GENERATION_STATUS_ACTIVE
+// VEO 3.1 — Multi-Key Cookie Rotation (4 keys)
+// Automatically rotates to next key on 429 quota errors.
+// Set env vars: GOOGLE_WHISK_COOKIE, GOOGLE_WHISK_COOKIE_2,
+//               GOOGLE_WHISK_COOKIE_3, GOOGLE_WHISK_COOKIE_4
 // ============================================================
 async function fetchVeoVideo(query, outputPath) {
-  if (!process.env.GOOGLE_WHISK_COOKIE) throw new Error('GOOGLE_WHISK_COOKIE not set, skipping Veo');
+  const cookieKeys = [
+    process.env.GOOGLE_WHISK_COOKIE,
+    process.env.GOOGLE_WHISK_COOKIE_2,
+    process.env.GOOGLE_WHISK_COOKIE_3,
+    process.env.GOOGLE_WHISK_COOKIE_4
+  ].filter(Boolean); // Only use keys that are actually set
 
-  try {
-    const { Whisk } = require('@rohitaryal/whisk-api');
-    const whisk = new Whisk(process.env.GOOGLE_WHISK_COOKIE);
-    const VEO_MODELS = 'VEO_3_1_I2V_12STEP';
+  if (cookieKeys.length === 0) throw new Error('No GOOGLE_WHISK_COOKIE keys set, skipping Veo');
 
-    const images = await whisk.generateImage(query, 1);
-    if (!images || images.length === 0) throw new Error('Veo Phase 1: Image Generation Failed');
+  let lastError = null;
 
-    const animScript = `${query}`;
+  for (let keyIndex = 0; keyIndex < cookieKeys.length; keyIndex++) {
+    const cookie = cookieKeys[keyIndex];
+    log.info(`Veo: Trying key ${keyIndex + 1}/${cookieKeys.length}...`);
 
-    // Bypass whisk-api's native 60s loop — enforce 180s patient polling manually
-    const token = await images[0].account.getToken();
+    try {
+      const { Whisk } = require('@rohitaryal/whisk-api');
+      const whisk = new Whisk(cookie);
+      const VEO_MODELS = 'VEO_3_1_I2V_12STEP';
 
-    const initRes = await fetch('https://aisandbox-pa.googleapis.com/v1/whisk:generateVideo', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        promptImageInput: { prompt: images[0].prompt, rawBytes: images[0].encodedMedia },
-        modelNameType: VEO_MODELS,
-        modelKey: '',
-        userInstructions: animScript,
-        loopVideo: false,
-        clientContext: { workflowId: images[0].workflowId }
-      })
-    });
+      const images = await whisk.generateImage(query, 1);
+      if (!images || images.length === 0) throw new Error('Veo Phase 1: Image Generation Failed');
 
-    const videoStatusResults = await initRes.json();
+      const token = await images[0].account.getToken();
 
-    // Catch safety filter rejection immediately — do not waste polling loops
-    if (videoStatusResults?.error) {
-      const errMsg = videoStatusResults.error.message || JSON.stringify(videoStatusResults.error);
-      if (errMsg.includes('PROMINENT_PEOPLE_FILTER_FAILED') || videoStatusResults.error.code === 400) {
-        log.warn(`⚠️ Veo safety filter triggered. Switching to abstract fallback.`);
-        return await fetchVeoVideo('Abstract digital data visualization flowing particles nebula. 4k, hyper-realistic, slow pan right', outputPath);
-      }
-      throw new Error(`Veo API error: ${errMsg}`);
-    }
-
-    if (!videoStatusResults?.operation?.operation?.name) {
-      throw new Error('Veo API: Failed to initiate video job — no operation name returned');
-    }
-
-    const id = videoStatusResults.operation.operation.name;
-
-    let polls = 0;
-    let finalVideoBytes = null;
-
-    // 180s patience: 12 polls × 15s = 180 seconds
-    while (polls < 12) {
-      polls++;
-      const pollRes = await fetch('https://aisandbox-pa.googleapis.com/v1:runVideoFxSingleClipsStatusCheck', {
+      const initRes = await fetch('https://aisandbox-pa.googleapis.com/v1/whisk:generateVideo', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ operations: [{ operation: { name: id } }] })
+        body: JSON.stringify({
+          promptImageInput: { prompt: images[0].prompt, rawBytes: images[0].encodedMedia },
+          modelNameType: VEO_MODELS, modelKey: '',
+          userInstructions: query,
+          loopVideo: false,
+          clientContext: { workflowId: images[0].workflowId }
+        })
       });
 
-      const pollData = await pollRes.json();
+      const videoStatusResults = await initRes.json();
 
-      if (pollData.status === 'MEDIA_GENERATION_STATUS_SUCCESSFUL') {
-        finalVideoBytes = pollData.operations[0].rawBytes;
-        break;
-      } else if (pollData.status === 'MEDIA_GENERATION_STATUS_ACTIVE') {
-        log.info(`Veo API: Rendering... (${polls * 15}s / 180s max)`);
-      } else {
-        log.warn(`Veo API: Unrecognized status: ${pollData.status}`);
+      // 429 quota hit — rotate to next key immediately
+      if (videoStatusResults?.error?.code === 429 ||
+          (videoStatusResults?.error?.message || '').includes('exhausted')) {
+        log.warn(`Veo key ${keyIndex + 1} hit quota limit. Rotating to next key...`);
+        lastError = new Error(`Key ${keyIndex + 1} quota exhausted`);
+        continue;
       }
 
-      await delay(15000); // 15-second back-off between polls
+      // Safety filter hit — swap to safe abstract prompt (don't rotate key)
+      if (videoStatusResults?.error?.code === 400 ||
+          (videoStatusResults?.error?.message || '').includes('PROMINENT_PEOPLE_FILTER_FAILED')) {
+        log.warn(`⚠️ Veo safety filter triggered. Switching to abstract fallback.`);
+        return await fetchVeoVideoWithCookie(cookie, 'Abstract digital data visualization flowing particles nebula. 4k, hyper-realistic, slow pan right', outputPath);
+      }
+
+      if (videoStatusResults?.error) {
+        throw new Error(`Veo API error: ${videoStatusResults.error.message}`);
+      }
+
+      if (!videoStatusResults?.operation?.operation?.name) {
+        throw new Error('Veo API: Failed to initiate video job — no operation name returned');
+      }
+
+      const id = videoStatusResults.operation.operation.name;
+      let polls = 0;
+      let finalVideoBytes = null;
+
+      // 180s patient polling loop (12 polls x 15s)
+      while (polls < 12) {
+        polls++;
+        const pollRes = await fetch('https://aisandbox-pa.googleapis.com/v1:runVideoFxSingleClipsStatusCheck', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ operations: [{ operation: { name: id } }] })
+        });
+
+        const pollData = await pollRes.json();
+        if (pollData.status === 'MEDIA_GENERATION_STATUS_SUCCESSFUL') {
+          finalVideoBytes = pollData.operations[0].rawBytes;
+          break;
+        } else if (pollData.status === 'MEDIA_GENERATION_STATUS_ACTIVE') {
+          log.info(`Veo: Still rendering... (${polls * 15}s / 180s)`);
+        } else {
+          log.warn(`Veo: Unrecognized status: ${pollData.status}`);
+        }
+        await delay(15000);
+      }
+
+      if (!finalVideoBytes) throw new Error('Veo Engine Error: Timed out after 180 seconds');
+
+      const buffer = Buffer.from(finalVideoBytes.replace(/^data:\w+\/\w+;base64,/, ''), 'base64');
+      const dir = path.dirname(outputPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(outputPath, buffer);
+
+      log.info(`✅ Veo 3.1 succeeded with key ${keyIndex + 1}`);
+      return 'Google Veo 3.1';
+
+    } catch (err) {
+      // Re-throw non-quota errors immediately (don't waste remaining keys)
+      if (!err.message.includes('quota') && !err.message.includes('exhausted') && !err.message.includes('RESOURCE_EXHAUSTED')) {
+        lastError = err;
+        break;
+      }
+      lastError = err;
     }
-
-    if (!finalVideoBytes) throw new Error('Veo Engine Error: Timed out after 180 seconds');
-
-    const buffer = Buffer.from(finalVideoBytes.replace(/^data:\w+\/\w+;base64,/, ''), 'base64');
-    const dir = path.dirname(outputPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(outputPath, buffer);
-
-    return 'Google Veo 3.1';
-  } catch (error) {
-    throw new Error(`Veo Engine Error: ${error.message}`);
   }
+
+  throw new Error(`Veo Engine Error: All ${cookieKeys.length} keys failed. Last: ${lastError?.message}`);
+}
+
+// Internal helper: run a Veo generation with a specific cookie (used for safety fallback)
+async function fetchVeoVideoWithCookie(cookie, query, outputPath) {
+  const { Whisk } = require('@rohitaryal/whisk-api');
+  const whisk = new Whisk(cookie);
+  const images = await whisk.generateImage(query, 1);
+  if (!images || images.length === 0) throw new Error('Veo abstract fallback: Image generation failed');
+  const token = await images[0].account.getToken();
+  const initRes = await fetch('https://aisandbox-pa.googleapis.com/v1/whisk:generateVideo', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      promptImageInput: { prompt: images[0].prompt, rawBytes: images[0].encodedMedia },
+      modelNameType: 'VEO_3_1_I2V_12STEP', modelKey: '',
+      userInstructions: query, loopVideo: false,
+      clientContext: { workflowId: images[0].workflowId }
+    })
+  });
+  const body = await initRes.json();
+  if (!body?.operation?.operation?.name) throw new Error('Veo abstract fallback: No operation returned');
+  const id = body.operation.operation.name;
+  let polls = 0;
+  let finalVideoBytes = null;
+  while (polls < 12) {
+    polls++;
+    const pollRes = await fetch('https://aisandbox-pa.googleapis.com/v1:runVideoFxSingleClipsStatusCheck', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ operations: [{ operation: { name: id } }] })
+    });
+    const pollData = await pollRes.json();
+    if (pollData.status === 'MEDIA_GENERATION_STATUS_SUCCESSFUL') {
+      finalVideoBytes = pollData.operations[0].rawBytes;
+      break;
+    }
+    await delay(15000);
+  }
+  if (!finalVideoBytes) throw new Error('Veo abstract fallback: Timed out');
+  const buffer = Buffer.from(finalVideoBytes.replace(/^data:\w+\/\w+;base64,/, ''), 'base64');
+  const dir = path.dirname(outputPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(outputPath, buffer);
+  return 'Google Veo 3.1';
 }
 
 function extractKeywords(prompt) {
