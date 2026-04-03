@@ -37,7 +37,7 @@ concurrency:
 jobs:
   pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       
@@ -97,3 +97,5 @@ jobs:
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           CHANNEL_FILTER: ${{ github.event.inputs.channel_filter || '' }}
           FORCE_NOW: ${{ github.event.inputs.force_now || 'false' }}
+          UPLOAD_WINDOW_START_HOUR: '8'
+          UPLOAD_WINDOW_END_HOUR: '23'
