@@ -4,8 +4,20 @@ const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const { getModuleLogger } = require('../utils/logger');
-
 const log = getModuleLogger('supabase-uploader');
+
+// Debug Guard (Action A)
+console.log('DEBUG: SUPABASE_URL starts with:', process.env.SUPABASE_URL ? process.env.SUPABASE_URL.substring(0, 8) : 'MISSING');
+
+let supabase;
+try {
+  supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
+  );
+} catch (err) {
+  log.error(`FAILED TO INIT SUPABASE CLIENT. CHECK IF URL IN GITHUB SECRETS STARTS WITH HTTPS://.`);
+}
 
 /**
  * Upload a finished MP4 to Supabase Storage and register it in the review queue.

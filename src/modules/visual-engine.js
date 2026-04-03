@@ -33,12 +33,60 @@ async function fetchVeoVideo(query, outputPath) {
     if (!images || images.length === 0) throw new Error("Veo Phase 1: Image Generation Failed");
     
     const animScript = `${query}, Cinematic, 4k, macro photography, dramatic side-lighting, moving particles, and high-motion dynamics.`;
-    const video = await images[0].animate(animScript, VEO_MODELS);
     
-    const tempDir = path.dirname(outputPath);
-    const tempPath = video.save(tempDir);
-    fs.copyFileSync(tempPath, outputPath);
-    fs.unlinkSync(tempPath);
+    // Bypass whisk-api's native animate() restriction to manually enforce the 180s patient loop
+    const token = await images[0].account.getToken();
+    
+    const initRes = await fetch("https://aisandbox-pa.googleapis.com/v1/whisk:generateVideo", {
+       method: 'POST',
+       headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+       body: JSON.stringify({
+          promptImageInput: { prompt: images[0].prompt, rawBytes: images[0].encodedMedia },
+          modelNameType: VEO_MODELS,
+          modelKey: "",
+          userInstructions: animScript,
+          loopVideo: false,
+          clientContext: { workflowId: images[0].workflowId }
+       })
+    });
+    
+    const videoStatusResults = await initRes.json();
+    if (!videoStatusResults?.operation?.operation?.name) throw new Error("Veo API: Failed to initiate video job");
+    const id = videoStatusResults.operation.operation.name;
+
+    let polls = 0;
+    let finalVideoBytes = null;
+    
+    // ACTION: Increase polling limit to exactly 180 seconds (12 polls * 15s)
+    while (polls < 12) {
+       polls++;
+       const pollRes = await fetch("https://aisandbox-pa.googleapis.com/v1:runVideoFxSingleClipsStatusCheck", {
+          method: 'POST',
+          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ operations: [{ operation: { name: id } }] })
+       });
+       
+       const pollData = await pollRes.json();
+       
+       if (pollData.status === "MEDIA_GENERATION_STATUS_SUCCESSFUL") {
+          finalVideoBytes = pollData.operations[0].rawBytes;
+          break;
+       } else if (pollData.status === "MEDIA_GENERATION_STATUS_ACTIVE") {
+          log.info(`Veo API: Still rendering... Active Status. (Elapsed: ${polls * 15}s / 180s)`);
+       } else {
+          log.warn(`Veo API: Unrecognized status: ${pollData.status}`);
+       }
+       
+       // ACTION: Add a 15-second delay between checks
+       await new Promise(r => setTimeout(r, 15000));
+    }
+
+    if (!finalVideoBytes) {
+       throw new Error("Veo Engine Error: Timed out after 180 seconds.");
+    }
+    
+    const buffer = Buffer.from(finalVideoBytes.replace(/^data:\w+\/\w+;base64,/, ""), "base64");
+    fs.writeFileSync(outputPath, buffer);
     
     return 'Google Veo 3.1';
   } catch (error) {
