@@ -38,13 +38,17 @@ const microsoftEdgeTTS = {
     const dir = path.dirname(outputPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    await communicate.save(outputPath);
-
-    if (!fs.existsSync(outputPath)) {
-      throw new Error('Edge TTS: Output file was not created on disk');
+    // Collect audio chunks from the async stream iterator
+    const chunks = [];
+    for await (const chunk of communicate.stream()) {
+      if (chunk.type === 'audio' && chunk.data) {
+        chunks.push(Buffer.isBuffer(chunk.data) ? chunk.data : Buffer.from(chunk.data));
+      }
     }
 
-    const audioBuffer = fs.readFileSync(outputPath);
+    if (chunks.length === 0) throw new Error('Edge TTS stream returned no audio chunks');
+    const audioBuffer = Buffer.concat(chunks);
+    fs.writeFileSync(outputPath, audioBuffer);
     if (!audioBuffer || audioBuffer.length < 1000) {
       throw new Error('Edge TTS: Produced an empty or too-small audio buffer');
     }

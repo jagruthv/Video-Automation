@@ -30,7 +30,7 @@ async function main() {
     });
     
     // acquireVisuals in V2 takes an array of prompts
-    const visualTask = acquireVisuals(metadata.visuals, tmpManager.subpath('clips', ''));
+    const visualTask = acquireVisuals(metadata, 45000, tmpManager.subpath('clips', ''));
 
     const [voiceResult, visualsResult] = await Promise.all([audioTask, visualTask]);
     log.info('Audio and visual assets successfully generated.');
