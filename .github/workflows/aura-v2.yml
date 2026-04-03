@@ -1,0 +1,25 @@
+name: AURA V2 Staging Pipeline
+on:
+  workflow_dispatch: # Allows you to trigger it manually for testing
+  schedule:
+    - cron: '0 12,21 * * *' # Runs twice a day
+
+jobs:
+  build-and-stage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Run Pipeline
+        run: node src/orchestrator/index.js
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NEXUSTTS_API_KEY: ${{ secrets.NEXUSTTS_API_KEY }}
+          GOOGLE_WHISK_COOKIE: ${{ secrets.GOOGLE_WHISK_COOKIE }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

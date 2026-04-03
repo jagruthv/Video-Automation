@@ -14,6 +14,7 @@ const { acquireVisuals } = require('./modules/visual-engine');
 const { assembleVideo } = require('./modules/assembly-engine');
 const { computeUniquenessScore, getOrCreateTodaySchedule, markSlotUsed } = require('./modules/anti-flag-engine');
 const { getPublisherPlugin } = require('./modules/publisher/index');
+const { uploadToStaging } = require('./modules/supabase-uploader');
 const { selectAffiliateForVideo, injectAffiliateComment } = require('./modules/affiliate-engine');
 const { getNextVideoJob, completeTask, failTask } = require('./modules/task-manager');
 const TmpManager = require('./utils/tmp-manager');
@@ -230,10 +231,19 @@ async function main() {
           attributions:        visuals.attributions || []
         };
 
-        // 11. Publish!
-        log.info(`Publishing to ${channel.platform}...`);
-        const publishResult = await plugin.upload(assembly.videoPath, metadata, channel, { isDryRun });
-        log.info(`Published: ${publishResult.url} (ID: ${publishResult.platformVideoId})`);
+        // 11. Upload to Supabase Staging Queue
+        log.info(`Uploading to Supabase Staging Queue for channel: ${channel.accountId}...`);
+        let publishResult = { url: '#dry-run', platformVideoId: null, status: 'dry_run' };
+
+        if (!isDryRun) {
+          const queueId = await uploadToStaging(
+            assembly.videoPath,
+            metadata,
+            { channelId: channel._id?.toString(), accountId: channel.accountId }
+          );
+          publishResult = { url: `supabase://aura_queue/${queueId}`, platformVideoId: queueId, status: 'pending_review' };
+          log.info(`📎 Video is now in the Staging Queue awaiting human review. Queue ID: ${queueId}`);
+        }
 
         // 12. Update video record & Channel recentTopics
         if (!isDryRun) {
@@ -277,7 +287,7 @@ async function main() {
 
         totalPublished++;
         if (isDryRun) {
-          log.info(`✅ DRY RUN: Execution complete. The video "${publishResult.url}" was generated locally but NOT uploaded.`);
+          log.info(`✅ DRY RUN: Execution complete. The video was assembled locally but NOT staged or uploaded.`);
         } else {
           log.info(`✅ Video published successfully: ${publishResult.url}`);
         }
