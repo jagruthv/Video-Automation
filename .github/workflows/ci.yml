@@ -1,4 +1,3 @@
-
 # ============================================================
 # AURA — CI / Pull Request Checks
 # Validates code quality on every push and PR.
@@ -39,23 +38,12 @@ jobs:
               './src/utils/logger',
               './src/utils/retry',
               './src/utils/tmp-manager',
-              './src/utils/ssml-builder',
-              './src/db/schema',
-              './src/modules/topic-intelligence',
-              './src/modules/llm-cascade',
+              './src/orchestrator/index',
+              './src/modules/script-writer',
               './src/modules/voice-engine',
               './src/modules/visual-engine',
               './src/modules/assembly-engine',
-              './src/modules/anti-flag-engine',
-              './src/modules/deduplication-guard',
-              './src/modules/affiliate-engine',
-              './src/modules/task-manager',
-              './src/modules/analytics-collector',
-              './src/modules/publisher/base-publisher',
-              './src/modules/publisher/youtube',
-              './src/modules/publisher/instagram',
-              './src/modules/publisher/tiktok',
-              './src/modules/publisher/x-twitter'
+              './src/modules/supabase-uploader'
             ];
             let pass = 0;
             for (const m of modules) {
@@ -95,5 +83,3 @@ jobs:
             exit 1
           fi
           echo ".env correctly excluded from repo."
-
-
