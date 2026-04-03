@@ -33,7 +33,8 @@ VIDEO EFFECT RULES:
 For EVERY scene (whether video or image), pick EXACTLY ONE effect from this list: zoom_in, pan_right, cyberpunk_color, bw_hacker, glitch.
 
 LENGTH REQUIREMENT:
-You MUST write exactly 80 to 100 words in the script. The video must be at least 45 seconds long. Do not write short 30-word scripts.
+Your script MUST be a minimum of 100 words. Explain the technical concepts in deep detail. If you write less than 100 words, the system will crash.
+The video must be at least 45 seconds long. Do not write short 30-word scripts.
 
 DESCRIPTION RULES:
 Write a high-energy YouTube description mixing English and conversational Telugu (Tanglish).
@@ -45,11 +46,13 @@ Must follow this structure:
 
 OUTPUT FORMAT: Respond ONLY with a single valid JSON object. No markdown fences. No explanation:
 {
-  "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only. MUST be 80-100 words.",
+  "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only. MUST be minimum 100 words.",
   "visuals": [{"type": "video", "query": "hacker typing", "effect": "zoom_in"}, {"type": "image", "prompt": "photorealistic glowing cyberpunk robot, 8k", "effect": "cyberpunk_color"}],
   "youtubeTitle": "Max 70 chars. High energy. 1 emoji. Include #shorts.",
   "youtubeDescription": "Tanglish description following exact structure above."
-}`;
+}
+
+CRITICAL: Output ONLY a raw, valid JSON object. Do not include any conversational text before or after the JSON. No markdown formatting. No \`\`\`json fences. Start your response with { and end with }.`;
 }
 
 /**
@@ -61,7 +64,9 @@ Source: ${source}
 Source URL: ${sourceUrl}
 Virality Score: ${viralityScore}/100
 
-You are the Vibecoder AI Director. Output the JSON object now. No markdown. No explanation.`;
+You are the Vibecoder AI Director. Output the JSON object now.
+RULE: Your script MUST be a minimum of 100 words. Explain technical concepts in deep detail. If you write less than 100 words, the system will crash.
+No markdown. No explanation. Start your response with { and end with }.`;
 }
 
 /**
@@ -70,23 +75,26 @@ You are the Vibecoder AI Director. Output the JSON object now. No markdown. No e
  * @returns {Object}
  */
 function parseScriptJSON(text) {
-  // Direct parse first
+  // Step 1: Aggressively strip markdown baggage first
+  let cleaned = text
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  // Step 2: Substring from first { to last } to discard any preamble or postamble
+  const startIdx = cleaned.indexOf('{');
+  const endIdx = cleaned.lastIndexOf('}');
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    cleaned = cleaned.substring(startIdx, endIdx + 1);
+  }
+
+  // Step 3: Parse the cleaned text
+  try { return JSON.parse(cleaned); } catch { }
+
+  // Step 4: Last-ditch — try the raw original text unchanged
   try { return JSON.parse(text); } catch { }
 
-  // Try extracting from markdown code fences
-  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (fenceMatch) {
-    try { return JSON.parse(fenceMatch[1]); } catch { }
-  }
-
-  // Try finding first { to last }
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(text.substring(start, end + 1)); } catch { }
-  }
-
-  throw new Error('Failed to parse JSON from LLM response');
+  throw new Error('Failed to parse JSON from LLM response — all strategies exhausted');
 }
 
 /**
@@ -98,13 +106,13 @@ function validateScript(script) {
   if (!script || typeof script !== 'object') return false;
   if (!script.script) return false;
   
-  // Word count validation to force fallback reprompting on lazy LLMs
+  // Enforce 100-word minimum — triggers feedback retry on lazy LLMs
   const wordCount = script.script.split(/\s+/).filter(w => w.length > 0).length;
-  if (wordCount < 60) {
-    throw new Error(`Script length validation failed: Only ${wordCount} words (minimum 60 strictly required.)`);
+  if (wordCount < 100) {
+    throw new Error(`Script length validation failed: Only ${wordCount} words (minimum 100 strictly required — system will reject shorter scripts.)`);
   }
 
-  // Validate internals
+  // Validate all required structural fields
   return !!(
     script.visuals &&
     Array.isArray(script.visuals) &&
