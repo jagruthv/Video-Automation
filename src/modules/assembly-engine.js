@@ -7,22 +7,12 @@ const { getModuleLogger } = require('../utils/logger');
 
 const log = getModuleLogger('assembly-engine');
 
-const FFMPEG_TIMEOUT = 180000; // 3 minutes
+const FFMPEG_TIMEOUT = 300000; // 5 minutes (xfade chains are heavy)
+const XFADE_DURATION = 0.5;   // 0.5-second crossfade between every clip
 
 // ============================================================
-// FFmpeg Effect Dictionary (LLM-controlled "AI Director")
-// Maps effect names to zoompan/color filter strings.
+// FFmpeg Runner
 // ============================================================
-const EFFECT_FILTERS = {
-  zoom_in:        (frames) => `zoompan=z='min(zoom+0.0015,1.5)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1080x1920:fps=30`,
-  pan_right:      (frames) => `zoompan=z='1.15':x='min(x+2,iw*0.15)':y='0':d=${frames}:s=1080x1920:fps=30`,
-  cyberpunk_color:(frames) => `zoompan=z='1.05':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1080x1920:fps=30,eq=contrast=1.2:saturation=1.5:gamma_b=0.9`,
-  bw_hacker:      (frames) => `zoompan=z='min(zoom+0.001,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1080x1920:fps=30,hue=s=0`,
-  glitch:         (frames) => `zoompan=z='1.1':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1080x1920:fps=30,noise=alls=8:allf=t+u`
-};
-
-const VALID_EFFECTS = Object.keys(EFFECT_FILTERS);
-
 function runFFmpeg(cmd, description = '') {
   return new Promise((resolve, reject) => {
     log.info(`FFmpeg: ${description || cmd.substring(0, 100)}...`);
@@ -53,53 +43,63 @@ async function ensureFFmpeg() {
   }
 }
 
-/**
- * Generate ASS subtitle file with word-by-word karaoke highlighting.
- */
+// ============================================================
+// ASS SUBTITLE GENERATOR
+// Zack D. Films style: Center screen, bold font, 
+// alternating yellow/white per word, thick black border.
+// ============================================================
 function generateASSFile(wordTimestamps, outputPath) {
+  // Alignment 5 = center screen (both horizontally and vertically centered)
   const header = `[Script Info]
 Title: AURA Subtitles
 ScriptType: v4.00+
 PlayResX: 1080
 PlayResY: 1920
-WrapStyle: 0
+WrapStyle: 1
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Arial,56,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,2,2,30,30,350,1
-Style: Highlight,Arial,58,&H0000FFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,2,2,30,30,350,1
+Style: White,Arial Black,72,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,5,2,5,40,40,960,1
+Style: Yellow,Arial Black,72,&H0000FFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,5,2,5,40,40,960,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
+
   const events = [];
-  const chunkSize = 3;
   const filteredWords = wordTimestamps.filter(w => w.word && w.word.trim().length > 0);
 
-  // Since we slowed the audio down by 10% (atempo=0.9), timestamps need mapping. 
-  // atempo=0.9 means audio is 1/0.9 = 1.111x longer.
+  // atempo=0.9 means audio is 1/0.9x longer — scale timestamps accordingly
   const timeScale = 1 / 0.9;
 
+  // Show 2 words at a time, alternating Yellow/White style per word
+  const chunkSize = 2;
   for (let i = 0; i < filteredWords.length; i += chunkSize) {
     const chunk = filteredWords.slice(i, i + chunkSize);
     if (!chunk.length) continue;
+
     const chunkStart = chunk[0].startMs * timeScale;
     const chunkEnd = chunk[chunk.length - 1].endMs * timeScale;
+
+    // Each word in the chunk flashes individually with its own colour
     for (let w = 0; w < chunk.length; w++) {
       const wordStart = chunk[w].startMs * timeScale;
       const wordEnd = w < chunk.length - 1 ? chunk[w + 1].startMs * timeScale : chunkEnd;
-      const parts = chunk.map((cw, ci) => {
-        const clean = cw.word.replace(/[{}\\]/g, '');
-        return ci === w ? `{\\c&H0000FFFF&\\b1}${clean}{\\c&H00FFFFFF&\\b0}` : clean;
-      });
-      events.push(`Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Default,,0,0,0,,${parts.join(' ')}`);
+      const style = (i / chunkSize + w) % 2 === 0 ? 'Yellow' : 'White';
+
+      // Popping animation: slight scale-up on entry using \t transform
+      const word = chunk[w].word.replace(/[{}\\]/g, '');
+      const popAnim = `{\\fscx120\\fscy120\\t(0,80,\\fscx100\\fscy100)}`;
+      events.push(
+        `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},${style},,0,0,0,,${popAnim}${word}`
+      );
     }
   }
 
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(outputPath, header + events.join('\n') + '\n');
-  log.info(`ASS subtitles: ${events.length} events generated`);
+  log.info(`ASS subtitles: ${events.length} events generated (center-screen, alternating yellow/white)`);
 }
 
 function formatASSTime(ms) {
@@ -111,9 +111,53 @@ function formatASSTime(ms) {
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '00')}`;
 }
 
-/**
- * Assemble final video from a dynamic array of Hybrid Visuals (Images and Videos).
- */
+// ============================================================
+// XFADE CHAIN BUILDER
+// Builds a complex FFmpeg filtergraph that crossfades N clips 
+// together seamlessly using the xfade filter.
+// Each transition = 0.5s overlap, blending visually.
+// ============================================================
+function buildXfadeFiltergraph(segmentPaths, xfadeDuration) {
+  const n = segmentPaths.length;
+  if (n === 1) return { inputs: `-i "${segmentPaths[0]}"`, filtergraph: null, finalLabel: '0:v' };
+
+  const inputs = segmentPaths.map(p => `-i "${p}"`).join(' ');
+  const filters = [];
+  let prevLabel = '[0:v]';
+  let offsetAccum = 0;
+
+  // Get durations of each segment to compute xfade offsets
+  const durations = segmentPaths.map(p => {
+    try {
+      return parseFloat(execSync(
+        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${p}"`,
+        { encoding: 'utf8' }
+      ).trim());
+    } catch { return 6; } // fallback 6s
+  });
+
+  for (let i = 1; i < n; i++) {
+    const nextLabel = `[v${i}]`;
+    const inputLabel = `[${i}:v]`;
+    // offset = sum of all previous clip durations minus cumulative xfade overlaps
+    offsetAccum += durations[i - 1] - xfadeDuration;
+    const outLabel = i === n - 1 ? '[vout]' : nextLabel;
+    filters.push(
+      `${prevLabel}${inputLabel}xfade=transition=smoothleft:duration=${xfadeDuration}:offset=${offsetAccum.toFixed(3)}${outLabel}`
+    );
+    prevLabel = nextLabel;
+  }
+
+  return {
+    inputs,
+    filtergraph: filters.join(';'),
+    finalLabel: '[vout]'
+  };
+}
+
+// ============================================================
+// MAIN ASSEMBLY — The Seamless Stitcher
+// ============================================================
 async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {}) {
   const hasFfmpeg = await ensureFFmpeg();
   if (!hasFfmpeg) throw new Error('FFmpeg is not available');
@@ -122,13 +166,13 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
   const outputDir = path.join(buildDir, 'output');
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-  const audioNorm   = path.join(buildDir, 'audio', 'voice_norm.mp3');
-  const audioMixed  = path.join(buildDir, 'audio', 'mixed_audio.mp3');
-  const bgVideo     = path.join(buildDir, 'bg_prepared.mp4');
-  const subsFile    = path.join(buildDir, 'subtitles.ass');
+  const audioNorm  = path.join(buildDir, 'audio', 'voice_norm.mp3');
+  const audioMixed = path.join(buildDir, 'audio', 'mixed_audio.mp3');
+  const bgVideo    = path.join(buildDir, 'bg_prepared.mp4');
+  const subsFile   = path.join(buildDir, 'subtitles.ass');
   const finalOutput = path.join(outputDir, `aura_${Date.now()}.mp4`);
 
-  // STEP 1: Normalize audio (Speed down by 10%, pad 1 second)
+  // STEP 1: Normalize audio
   log.info('Step 1: Normalizing audio (atempo=0.9 + 1s tail silence)...');
   await runFFmpeg(
     `ffmpeg -y -i "${audioPath}" -af "atempo=0.9,loudnorm=I=-14:LRA=11:TP=-1.5,apad=pad_dur=1" -ar 48000 -ac 1 "${audioNorm}"`,
@@ -143,70 +187,52 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
 
   if (visualClips.length === 0) throw new Error('No visual clips provided to assembler');
 
-  // Loop logic (Action B): If scenes are too long, duplicate the array to trigger more cuts and loop the acquired scenes.
-  let activeClips = [...visualClips];
-  if (options.loopVisuals) {
-    const MAX_CLIP_DUR = 8; // Max 8 seconds per scene for high retention
-    let currentDur = audioDuration / activeClips.length;
-    while(currentDur > MAX_CLIP_DUR && activeClips.length < 25) {
-      activeClips = [...activeClips, ...visualClips];
-      currentDur = audioDuration / activeClips.length;
-    }
-    log.info(`[Loop Logic] Expanded ${visualClips.length} raw scenes to ${activeClips.length} dynamic cuts.`);
-  }
-
-  // STEP 2: Standardise mixed media into perfect MP4 snippets
-  log.info('Step 2: Pre-compiling Hybrid Media (Hard Cuts, No XFades)...');
-  const durationPerImage = audioDuration / activeClips.length;
+  // STEP 2: Standardize all clips to identical 1080x1920 @ 30fps segments
+  log.info('Step 2: Standardizing all clips to 1080x1920 @ 30fps...');
+  const durationPerClip = audioDuration / visualClips.length;
   const segmentPaths = [];
 
-  for (let i = 0; i < activeClips.length; i++) {
-    const clip = activeClips[i];
+  for (let i = 0; i < visualClips.length; i++) {
+    const clip = visualClips[i];
     const segPath = path.join(buildDir, `scene_std_${i}.mp4`);
-    const effectName = VALID_EFFECTS.includes(clip.effect) ? clip.effect : 'zoom_in';
-    const frames = Math.round(durationPerImage * 30); // 30 FPS strict enforced
+    const frames = Math.round(durationPerClip * 30);
 
     if (clip.type === 'image') {
-      const filterStr = EFFECT_FILTERS[effectName](frames);
       await runFFmpeg(
-        `ffmpeg -y -loop 1 -i "${clip.path}" -t ${durationPerImage} ` +
-        `-vf "scale=1200:2140,${filterStr},setsar=1" ` +
+        `ffmpeg -y -loop 1 -i "${clip.path}" -t ${durationPerClip} ` +
+        `-vf "scale=1200:2140,zoompan=z='1.05':x='min(x+1,iw*0.1)':y='ih/2-(ih/zoom/2)':d=${frames}:s=1080x1920:fps=30,setsar=1" ` +
         `-c:v libx264 -preset fast -pix_fmt yuv420p "${segPath}"`,
-        `Standarising Image ${i+1}/${activeClips.length} with ${effectName}`
+        `Standardising Image ${i + 1}/${visualClips.length} (pan right)`
       );
     } else {
-      // It's a video. MUST use -stream_loop -1 so stock videos seamlessly loop if durationPerImage exceeds original length
       await runFFmpeg(
-        `ffmpeg -y -stream_loop -1 -i "${clip.path}" -t ${durationPerImage} ` +
+        `ffmpeg -y -stream_loop -1 -i "${clip.path}" -t ${durationPerClip} ` +
         `-vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30" ` +
         `-c:v libx264 -preset fast -pix_fmt yuv420p -an "${segPath}"`,
-        `Standarising Video ${i+1}/${activeClips.length}`
+        `Standardising Video ${i + 1}/${visualClips.length}`
       );
     }
     segmentPaths.push(segPath);
   }
 
-  // Use concat filter since files are perfectly identical in stream geometry now
+  // STEP 2.5: Crossfade xfade stitch (replacing hard-cut concat)
   if (segmentPaths.length === 1) {
     fs.copyFileSync(segmentPaths[0], bgVideo);
+    log.info('Step 2.5: Single clip — no xfade needed.');
   } else {
-    log.info('Step 2.5: Concatenating Standardized Scenes...');
-    
-    // We create a temp file list for the powerful concat demuxer
-    const listPath = path.join(buildDir, 'concat_list.txt');
-    const concatListRaw = segmentPaths.map(p => `file '${p}'`).join('\n');
-    fs.writeFileSync(listPath, concatListRaw);
-    
+    log.info(`Step 2.5: Stitching ${segmentPaths.length} clips with ${XFADE_DURATION}s xfade crossfades...`);
+    const { inputs, filtergraph, finalLabel } = buildXfadeFiltergraph(segmentPaths, XFADE_DURATION);
+
     await runFFmpeg(
-      `ffmpeg -y -f concat -safe 0 -i "${listPath}" -c copy "${bgVideo}"`,
-      'Demuxer Concat'
+      `ffmpeg -y ${inputs} -filter_complex "${filtergraph}" -map "${finalLabel}" ` +
+      `-c:v libx264 -preset fast -pix_fmt yuv420p "${bgVideo}"`,
+      `XFade crossfade stitch (${segmentPaths.length} clips)`
     );
   }
 
-  // Cleanup segments
   segmentPaths.forEach(sp => { try { fs.unlinkSync(sp); } catch {} });
 
-  // STEP 3: Mix ambient noise
+  // STEP 3: Mix ambient audio (optional)
   log.info('Step 3: Mixing audio...');
   const ambientDir = path.join(__dirname, '../../assets/ambient');
   const ambientFiles = fs.existsSync(ambientDir)
@@ -225,19 +251,19 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
     fs.copyFileSync(audioNorm, audioMixed);
   }
 
-  // STEP 4: Generate subtitles
-  log.info('Step 4: Generating subtitles...');
+  // STEP 4: Generate center-screen subtitles (alternating yellow/white, pop animation)
+  log.info('Step 4: Generating center-screen subtitles...');
   if (wordTimestamps && wordTimestamps.length > 0) {
     generateASSFile(wordTimestamps, subsFile);
   }
 
-  // STEP 5: Final merge with Natural Ending
-  log.info('Step 5: Final assembly (natural ending with audio fade-out)...');
+  // STEP 5: Final assembly with audio fade-out
+  log.info('Step 5: Final assembly (audio fade-out + subtitle burn)...');
   const subsFilter = fs.existsSync(subsFile) ? `,ass=${subsFile.replace(/\\/g, '/')}` : '';
   await runFFmpeg(
     `ffmpeg -y -i "${bgVideo}" -i "${audioMixed}" ` +
     `-vf "fps=30${subsFilter}" ` +
-    `-af "afade=t=out:st=58:d=1" ` +
+    `-af "afade=t=out:st=55:d=2" ` +
     `-c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k ` +
     `-shortest -movflags +faststart "${finalOutput}"`,
     'Final video assembly'
@@ -254,8 +280,8 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
     { encoding: 'utf8' }
   ).trim());
 
-  if (outDuration < 10 || outDuration > 60) {
-    log.warn(`Output duration ${outDuration}s is outside expected 10-60s range`);
+  if (outDuration < 10 || outDuration > 65) {
+    log.warn(`Output duration ${outDuration}s is outside expected 10-65s range`);
   }
 
   const fileSizeMB = stat.size / (1024 * 1024);

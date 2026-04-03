@@ -8,9 +8,9 @@ const { withRetry } = require('../utils/retry');
 const log = getModuleLogger('voice-engine');
 
 // ============================================================
-// Microsoft Edge TTS — PRIMARY ENGINE
+// Microsoft Edge TTS — SOLE PRIMARY ENGINE
 // Free Microsoft Azure Neural TTS. No API key required.
-// Voice: en-US-ChristopherNeural (deep, resonant bass male)
+// Default: en-US-ChristopherNeural (deep, resonant bass)
 // Override via env: EDGE_VOICE_ID
 // ============================================================
 const microsoftEdgeTTS = {
@@ -31,8 +31,8 @@ const microsoftEdgeTTS = {
 
     const communicate = new Communicate(cleanText, {
       voice: voiceName,
-      rate: '-5%',   // Slightly slower for dramatic pacing
-      pitch: '-5Hz'  // Slightly lower pitch to enhance bass resonance
+      rate: '-5%',    // Slightly slower for dramatic "facts" pacing
+      pitch: '-5Hz'   // Lower pitch for deep bass resonance
     });
 
     const dir = path.dirname(outputPath);
@@ -41,12 +41,12 @@ const microsoftEdgeTTS = {
     await communicate.save(outputPath);
 
     if (!fs.existsSync(outputPath)) {
-      throw new Error('Edge TTS: Output file was not created');
+      throw new Error('Edge TTS: Output file was not created on disk');
     }
 
     const audioBuffer = fs.readFileSync(outputPath);
     if (!audioBuffer || audioBuffer.length < 1000) {
-      throw new Error('Edge TTS: Produced empty or too-small audio buffer');
+      throw new Error('Edge TTS: Produced an empty or too-small audio buffer');
     }
 
     const durationMs = estimateAudioDuration(audioBuffer);
@@ -92,7 +92,7 @@ function saveAudio(buffer, filePath) {
 }
 
 // ============================================================
-// MAIN VOICE GENERATION — Edge TTS Primary
+// MAIN VOICE GENERATION
 // ============================================================
 async function generateVoice(scriptText, options = {}) {
   const outputPath = options.outputPath || '/tmp/build/audio/voice.mp3';
@@ -105,12 +105,11 @@ async function generateVoice(scriptText, options = {}) {
       { maxRetries: 3, name: 'tts-edge', baseDelay: 2000 }
     );
 
-    // Audio is already saved to disk by Edge TTS's .save() method
-    // Re-save via saveAudio to ensure consistent logging
-    if (!fs.existsSync(outputPath)) {
-      saveAudio(result.audioBuffer, outputPath);
-    } else {
+    // Edge TTS already saves to disk via .save(), log confirmation
+    if (fs.existsSync(outputPath)) {
       log.info(`Audio saved: ${outputPath} (${(result.audioBuffer.length / 1024).toFixed(0)}KB)`);
+    } else {
+      saveAudio(result.audioBuffer, outputPath);
     }
 
     log.info(`TTS: Edge TTS succeeded — ${result.durationMs}ms, voice: ${result.voice}`);
@@ -123,7 +122,7 @@ async function generateVoice(scriptText, options = {}) {
       voice: result.voice
     };
   } catch (err) {
-    log.error(`TTS: Microsoft Edge TTS failed after retries: ${err.message}`);
+    log.error(`TTS: Microsoft Edge TTS failed after all retries: ${err.message}`);
     throw new Error('ALL_TTS_PROVIDERS_EXHAUSTED');
   }
 }

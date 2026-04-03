@@ -9,6 +9,7 @@ const log = getModuleLogger('visual-engine');
 
 const VISUAL_TIMEOUT_MS = 60000;
 const POLLINATIONS_COOLDOWN_MS = 5000;
+const VISUALS_OUTPUT_DIR = '/tmp/build/visuals';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -21,73 +22,90 @@ async function downloadFile(url, outputPath) {
   fs.writeFileSync(outputPath, buffer);
 }
 
+// ============================================================
+// VEO 3.1 — The Primary Premium Engine
+// 180-second patient polling loop for MEDIA_GENERATION_STATUS_ACTIVE
+// ============================================================
 async function fetchVeoVideo(query, outputPath) {
   if (!process.env.GOOGLE_WHISK_COOKIE) throw new Error('GOOGLE_WHISK_COOKIE not set, skipping Veo');
-  
+
   try {
     const { Whisk } = require('@rohitaryal/whisk-api');
     const whisk = new Whisk(process.env.GOOGLE_WHISK_COOKIE);
-    const VEO_MODELS = "VEO_3_1_I2V_12STEP";
-    
+    const VEO_MODELS = 'VEO_3_1_I2V_12STEP';
+
     const images = await whisk.generateImage(query, 1);
-    if (!images || images.length === 0) throw new Error("Veo Phase 1: Image Generation Failed");
-    
-    const animScript = `${query}, Cinematic, 4k, macro photography, dramatic side-lighting, moving particles, and high-motion dynamics.`;
-    
-    // Bypass whisk-api's native animate() restriction to manually enforce the 180s patient loop
+    if (!images || images.length === 0) throw new Error('Veo Phase 1: Image Generation Failed');
+
+    const animScript = `${query}`;
+
+    // Bypass whisk-api's native 60s loop — enforce 180s patient polling manually
     const token = await images[0].account.getToken();
-    
-    const initRes = await fetch("https://aisandbox-pa.googleapis.com/v1/whisk:generateVideo", {
-       method: 'POST',
-       headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-       body: JSON.stringify({
-          promptImageInput: { prompt: images[0].prompt, rawBytes: images[0].encodedMedia },
-          modelNameType: VEO_MODELS,
-          modelKey: "",
-          userInstructions: animScript,
-          loopVideo: false,
-          clientContext: { workflowId: images[0].workflowId }
-       })
+
+    const initRes = await fetch('https://aisandbox-pa.googleapis.com/v1/whisk:generateVideo', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        promptImageInput: { prompt: images[0].prompt, rawBytes: images[0].encodedMedia },
+        modelNameType: VEO_MODELS,
+        modelKey: '',
+        userInstructions: animScript,
+        loopVideo: false,
+        clientContext: { workflowId: images[0].workflowId }
+      })
     });
-    
+
     const videoStatusResults = await initRes.json();
-    if (!videoStatusResults?.operation?.operation?.name) throw new Error("Veo API: Failed to initiate video job");
+
+    // Catch safety filter rejection immediately — do not waste polling loops
+    if (videoStatusResults?.error) {
+      const errMsg = videoStatusResults.error.message || JSON.stringify(videoStatusResults.error);
+      if (errMsg.includes('PROMINENT_PEOPLE_FILTER_FAILED') || videoStatusResults.error.code === 400) {
+        log.warn(`⚠️ Veo safety filter triggered. Switching to abstract fallback.`);
+        return await fetchVeoVideo('Abstract digital data visualization flowing particles nebula. 4k, hyper-realistic, slow pan right', outputPath);
+      }
+      throw new Error(`Veo API error: ${errMsg}`);
+    }
+
+    if (!videoStatusResults?.operation?.operation?.name) {
+      throw new Error('Veo API: Failed to initiate video job — no operation name returned');
+    }
+
     const id = videoStatusResults.operation.operation.name;
 
     let polls = 0;
     let finalVideoBytes = null;
-    
-    // ACTION: Increase polling limit to exactly 180 seconds (12 polls * 15s)
+
+    // 180s patience: 12 polls × 15s = 180 seconds
     while (polls < 12) {
-       polls++;
-       const pollRes = await fetch("https://aisandbox-pa.googleapis.com/v1:runVideoFxSingleClipsStatusCheck", {
-          method: 'POST',
-          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ operations: [{ operation: { name: id } }] })
-       });
-       
-       const pollData = await pollRes.json();
-       
-       if (pollData.status === "MEDIA_GENERATION_STATUS_SUCCESSFUL") {
-          finalVideoBytes = pollData.operations[0].rawBytes;
-          break;
-       } else if (pollData.status === "MEDIA_GENERATION_STATUS_ACTIVE") {
-          log.info(`Veo API: Still rendering... Active Status. (Elapsed: ${polls * 15}s / 180s)`);
-       } else {
-          log.warn(`Veo API: Unrecognized status: ${pollData.status}`);
-       }
-       
-       // ACTION: Add a 15-second delay between checks
-       await new Promise(r => setTimeout(r, 15000));
+      polls++;
+      const pollRes = await fetch('https://aisandbox-pa.googleapis.com/v1:runVideoFxSingleClipsStatusCheck', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operations: [{ operation: { name: id } }] })
+      });
+
+      const pollData = await pollRes.json();
+
+      if (pollData.status === 'MEDIA_GENERATION_STATUS_SUCCESSFUL') {
+        finalVideoBytes = pollData.operations[0].rawBytes;
+        break;
+      } else if (pollData.status === 'MEDIA_GENERATION_STATUS_ACTIVE') {
+        log.info(`Veo API: Rendering... (${polls * 15}s / 180s max)`);
+      } else {
+        log.warn(`Veo API: Unrecognized status: ${pollData.status}`);
+      }
+
+      await delay(15000); // 15-second back-off between polls
     }
 
-    if (!finalVideoBytes) {
-       throw new Error("Veo Engine Error: Timed out after 180 seconds.");
-    }
-    
-    const buffer = Buffer.from(finalVideoBytes.replace(/^data:\w+\/\w+;base64,/, ""), "base64");
+    if (!finalVideoBytes) throw new Error('Veo Engine Error: Timed out after 180 seconds');
+
+    const buffer = Buffer.from(finalVideoBytes.replace(/^data:\w+\/\w+;base64,/, ''), 'base64');
+    const dir = path.dirname(outputPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(outputPath, buffer);
-    
+
     return 'Google Veo 3.1';
   } catch (error) {
     throw new Error(`Veo Engine Error: ${error.message}`);
@@ -101,6 +119,9 @@ function extractKeywords(prompt) {
   return words.slice(0, 3).join(' ');
 }
 
+// ============================================================
+// PEXELS VIDEO — Fallback 1
+// ============================================================
 async function fetchPexelsVideo(query, outputPath) {
   if (!process.env.PEXELS_API_KEY) throw new Error('PEXELS_API_KEY not set');
   const res = await fetch(
@@ -119,14 +140,20 @@ async function fetchPexelsVideo(query, outputPath) {
   return 'Pexels Video';
 }
 
+// ============================================================
+// POLLINATIONS AI — Fallback 2 (Image)
+// ============================================================
 async function fetchPollinationsImage(prompt, outputPath) {
-  await delay(POLLINATIONS_COOLDOWN_MS); // 5s Cooldown block
+  await delay(POLLINATIONS_COOLDOWN_MS);
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1920&nologo=true`;
   await downloadFile(url, outputPath);
   if (fs.existsSync(outputPath) && fs.statSync(outputPath).size < 10000) throw new Error('Pollinations image too small');
   return 'Pollinations.ai';
 }
 
+// ============================================================
+// PEXELS IMAGE — Fallback 3
+// ============================================================
 async function fetchPexelsImage(query, outputPath) {
   if (!process.env.PEXELS_API_KEY) throw new Error('PEXELS_API_KEY not set');
   const res = await fetch(
@@ -144,6 +171,9 @@ async function fetchPexelsImage(query, outputPath) {
   return 'Pexels Image';
 }
 
+// ============================================================
+// PIXABAY IMAGE — Fallback 4
+// ============================================================
 async function fetchPixabayImage(query, outputPath) {
   if (!process.env.PIXABAY_API_KEY) throw new Error('PIXABAY_API_KEY not set');
   const res = await fetch(
@@ -158,37 +188,37 @@ async function fetchPixabayImage(query, outputPath) {
   return 'Pixabay';
 }
 
+// ============================================================
+// IMAGE ACQUISITION CASCADE
+// ============================================================
 async function acquireImage(prompt, outputPath, sceneIndex) {
   const keywords = extractKeywords(prompt);
 
   try {
-    log.info(`Scene ${sceneIndex}: Pollinations AI → "${prompt.substring(0, 50)}..."`);
+    log.info(`Scene ${sceneIndex}: Pollinations AI → "${prompt.substring(0, 60)}..."`);
     const provider = await withRetry(() => fetchPollinationsImage(prompt, outputPath), { maxRetries: 2, name: `pollinations-${sceneIndex}` });
     return { provider, attribution: 'Image by Pollinations.ai' };
-  } catch (err) {
-    log.warn(`Scene ${sceneIndex}: Pollinations failed. Trying Pexels Image...`);
-  }
+  } catch { log.warn(`Scene ${sceneIndex}: Pollinations failed. Trying Pexels Image...`); }
 
   try {
     const provider = await fetchPexelsImage(keywords, outputPath);
     return { provider, attribution: 'Photo by Pexels' };
-  } catch (err) {
-    log.warn(`Scene ${sceneIndex}: Pexels Image failed. Trying Pixabay...`);
-  }
+  } catch { log.warn(`Scene ${sceneIndex}: Pexels Image failed. Trying Pixabay...`); }
 
   try {
     const provider = await fetchPixabayImage(keywords, outputPath);
     return { provider, attribution: 'Image by Pixabay' };
-  } catch (err) {
-    log.error(`Scene ${sceneIndex}: All traditional image providers failed. Deploying invincible placeholder.`);
-    
-    // Extreme Fallback
+  } catch {
+    log.error(`Scene ${sceneIndex}: All image providers failed. Deploying Unsplash placeholder.`);
     const fallbackUrl = 'https://source.unsplash.com/1080x1920/?technology,abstract';
     await downloadFile(fallbackUrl, outputPath);
     return { provider: 'Unsplash Static Placeholder', attribution: 'Image by Unsplash' };
   }
 }
 
+// ============================================================
+// VIDEO ACQUISITION CASCADE
+// ============================================================
 async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
   try {
     log.info(`Scene ${sceneIndex}: Google Veo 3.1 → "${query}"`);
@@ -198,14 +228,14 @@ async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
       } catch (veoErr) {
         if (veoErr.message && (veoErr.message.includes('PROMINENT_PEOPLE_FILTER_FAILED') || veoErr.message.includes('INVALID_ARGUMENT'))) {
           log.warn(`⚠️ Veo safety filter triggered. Switching to abstract fallback.`);
-          return await fetchVeoVideo("Abstract digital data visualization.", videoPath);
+          return await fetchVeoVideo('Abstract digital data visualization flowing particles nebula. 4k, hyper-realistic, slow pan right', videoPath);
         }
         throw veoErr;
       }
     }, { maxRetries: 1, name: `veo-video-${sceneIndex}` });
     return { path: videoPath, type: 'video', provider, attribution: 'Video by Google Veo' };
   } catch (err) {
-    log.warn(`Scene ${sceneIndex}: Google Veo 3.1 failed. Falling back to Pexels Video...`);
+    log.warn(`Scene ${sceneIndex}: Veo failed (${err.message}). Falling back to Pexels Video...`);
   }
 
   try {
@@ -213,68 +243,75 @@ async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
     const provider = await withRetry(() => fetchPexelsVideo(query, videoPath), { maxRetries: 2, name: `pexels-video-${sceneIndex}` });
     return { path: videoPath, type: 'video', provider, attribution: 'Video by Pexels' };
   } catch (err) {
-    log.warn(`Scene ${sceneIndex}: Pexels Video failed. Falling back to Pollinations image cascade...`);
+    log.warn(`Scene ${sceneIndex}: Pexels Video failed. Falling back to image cascade...`);
   }
 
   const { provider, attribution } = await acquireImage(query, imageFallbackPath, sceneIndex);
   return { path: imageFallbackPath, type: 'image', provider, attribution };
 }
 
-async function acquireVisuals(scriptJson, targetDurationMs, outputDir = '/tmp/build/clips') {
+// ============================================================
+// MAIN: ACQUIRE ALL VISUALS
+// Iterates the exact array from script-writer. Saves to /tmp/build/visuals/
+// ============================================================
+async function acquireVisuals(scriptJson, targetDurationMs, outputDir = VISUALS_OUTPUT_DIR) {
   if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-  const visualsArray = Array.isArray(scriptJson.visuals) ? scriptJson.visuals : (scriptJson.visuals?.clips || []);
+  const visualsArray = Array.isArray(scriptJson.visuals)
+    ? scriptJson.visuals
+    : (scriptJson.visuals?.clips || []);
+
   if (visualsArray.length === 0) {
-    visualsArray.push('Cyberpunk hacker typing furiously', 'Quantum computer glowing blue', 'holographic neon sign');
+    visualsArray.push(
+      'Abstract quantum particles colliding in deep space. 4k, hyper-realistic, slow pan right',
+      'Macro shot of glowing circuit board traces. 4k, hyper-realistic, slow pan right',
+      'Deep ocean bioluminescent organisms floating. 4k, hyper-realistic, slow pan right',
+      'Timelapse of storm clouds forming over a mountain range. 4k, hyper-realistic, slow pan right',
+      'Abstract digital data streams flowing through neon tunnels. 4k, hyper-realistic, slow pan right'
+    );
   }
 
-  log.info(`Acquiring ${visualsArray.length} hybrid visual scenes...`);
+  log.info(`Acquiring ${visualsArray.length} Veo 3.1 scenes...`);
   const clips = [];
 
   for (let i = 0; i < visualsArray.length; i++) {
     const item = visualsArray[i];
-    const query = typeof item === 'string' ? item : (item.query || item.prompt || 'technology');
-    const effect = typeof item === 'string' ? 'zoom_in' : (item.effect || 'zoom_in');
-    const type = typeof item === 'string' ? 'video' : (item.type || 'video');
+    const query = typeof item === 'string' ? item : (item.query || item.prompt || 'abstract technology');
+    const effect = 'pan_right'; // Unified effect to match "slow pan right" Veo directive
 
     try {
-      if (type === 'video') {
-        const videoPath = path.join(outputDir, `scene_${i}.mp4`);
-        const imgPath = path.join(outputDir, `scene_${i}.jpg`);
-        const result = await acquireVideo(query, videoPath, imgPath, i + 1);
-        clips.push({ ...result, effect, durationMs: 0 });
-      } else {
-        const imgPath = path.join(outputDir, `scene_${i}.jpg`);
-        const { provider, attribution } = await acquireImage(query, imgPath, i + 1);
-        clips.push({ path: imgPath, type: 'image', effect, provider, attribution, durationMs: 0 });
-      }
+      const videoPath = path.join(outputDir, `scene_${i}.mp4`);
+      const imgPath = path.join(outputDir, `scene_${i}.jpg`);
+      const result = await acquireVideo(query, videoPath, imgPath, i + 1);
+      clips.push({ ...result, effect, durationMs: 0 });
     } catch (err) {
-      log.error(`Scene ${i + 1} processing error — skipping: ${err.message}`);
+      log.error(`Scene ${i + 1} critically failed — skipping: ${err.message}`);
     }
   }
 
-  // The Resilient Engine update: Proceed as long as we have literally any clips
   if (clips.length === 0) {
-    throw new Error(`VISUAL_ACQUISITION_FAILED: Zero scenes acquired. Even placeholders failed.`);
+    throw new Error('VISUAL_ACQUISITION_FAILED: Zero scenes acquired. Even placeholders failed.');
   }
 
   const durationPerClip = Math.round(targetDurationMs / clips.length);
   clips.forEach(c => { c.durationMs = durationPerClip; });
 
-  log.info(`Visuals complete: ${clips.length} scenes acquired. Duration set to ~${Math.round(durationPerClip / 1000)}s each.`);
+  log.info(`Visuals complete: ${clips.length} scenes. ~${Math.round(durationPerClip / 1000)}s each.`);
 
   const attributions = [...new Set(clips.map(c => c.attribution))];
   return { clips, provider: 'hybrid', attributions };
 }
 
+// ============================================================
+// HERO THUMBNAIL
+// ============================================================
 async function generateHeroThumbnail(topic, outputPath) {
   const prompt = `High-contrast, vibrant colors, minimal background, glowing centered tech icon, 9:16, ultra-detailed ${topic}`;
   const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1080&height=1920&nologo=true`;
-  
   try {
     await withRetry(() => downloadFile(url, outputPath), { maxRetries: 2, name: 'hero-thumbnail' });
     if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 10000) return true;
-    throw new Error('Placeholder generated');
+    throw new Error('Thumbnail too small');
   } catch (err) {
     log.error(`Hero Thumbnail generation failed: ${err.message}`);
     return false;
