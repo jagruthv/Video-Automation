@@ -85,6 +85,7 @@ jobs:
           NEXUSTTS_API_KEY: ${{ secrets.NEXUSTTS_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          GOOGLE_WHISK_COOKIE: ${{ secrets.GOOGLE_WHISK_COOKIE }}
           YT_TECH_MAIN_CLIENT_ID: ${{ secrets.YT_TECH_MAIN_CLIENT_ID }}
           YT_TECH_MAIN_CLIENT_SECRET: ${{ secrets.YT_TECH_MAIN_CLIENT_SECRET }}
           YT_TECH_MAIN_REFRESH_TOKEN: ${{ secrets.YT_TECH_MAIN_REFRESH_TOKEN }}
