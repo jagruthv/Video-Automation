@@ -39,10 +39,12 @@ async function main() {
     tmpManager.create();
     log.info(`Pipeline run ${runId} started`);
 
-    await SystemLog.create({
-      runId, event: 'pipeline_start', module: 'orchestrator',
-      level: 'info', payload: { startTime: new Date() }, timestamp: new Date()
-    });
+    if (!isDryRun) {
+      await SystemLog.create({
+        runId, event: 'pipeline_start', module: 'orchestrator',
+        level: 'info', payload: { startTime: new Date() }, timestamp: new Date()
+      });
+    }
 
     // 1. Get all active channels
     const channels = await Channel.find({ isActive: true });
@@ -68,7 +70,7 @@ async function main() {
         }
 
         const quota = await plugin.checkQuota(channel);
-        if (quota.remainingQuota < plugin.costPerUpload) {
+        if (!isDryRun && quota.remainingQuota < plugin.costPerUpload) {
           log.info(`${channel.accountId}: Quota exhausted (${quota.remainingQuota} remaining). Skipping.`);
           continue;
         }
@@ -77,7 +79,7 @@ async function main() {
         const schedule = await getOrCreateTodaySchedule(channel.accountId);
         const now = new Date();
         const nextSlot = schedule.find(s => !s.used && s.time <= now);
-        if (!forceNow && !nextSlot) {
+        if (!isDryRun && !forceNow && !nextSlot) {
           const futureSlots = schedule.filter(s => !s.used && s.time > now);
           if (futureSlots.length > 0) {
             log.info(`${channel.accountId}: No slot ready now. Next at ${futureSlots[0].time.toISOString()}`);
@@ -87,7 +89,9 @@ async function main() {
           continue;
         }
 
-        if (forceNow) {
+        if (isDryRun) {
+          log.info(`Dry Run activated: Bypassing quota and schedule slot checking.`);
+        } else if (forceNow) {
           log.info(`Upload slot forcefully bypassed via --force-now flag.`);
         } else {
           log.info(`Upload slot available: ${nextSlot.time.toISOString()}`);
@@ -147,19 +151,35 @@ async function main() {
         log.info(`Video assembled: ${assembly.durationSeconds}s, ${assembly.fileSizeMB}MB`);
 
         // 9. Create video record and compute uniqueness
-        const videoRecord = await VideoRecord.create({
-          accountId: channel.accountId,
-          verticalId: channel.verticalId,
-          platform: channel.platform,
-          topic: job.topic,
-          topicHash: hashTopic(job.topic),
-          scriptJson: script,
-          llmProvider,
-          ttsProvider: voiceResult.provider,
-          ttsVoice: voiceResult.voice,
-          visualProvider: visuals.provider,
-          status: 'processing'
-        });
+        let videoRecord;
+        if (!isDryRun) {
+          videoRecord = await VideoRecord.create({
+            accountId: channel.accountId,
+            verticalId: channel.verticalId,
+            platform: channel.platform,
+            topic: job.topic,
+            topicHash: hashTopic(job.topic),
+            scriptJson: script,
+            llmProvider,
+            ttsProvider: voiceResult.provider,
+            ttsVoice: voiceResult.voice,
+            visualProvider: visuals.provider,
+            status: 'processing'
+          });
+        } else {
+          videoRecord = {
+            _id: 'dry-run-id',
+            accountId: channel.accountId,
+            verticalId: channel.verticalId,
+            platform: channel.platform,
+            topic: job.topic,
+            topicHash: hashTopic(job.topic),
+            scriptJson: script,
+            llmProvider,
+            visualProvider: visuals.provider
+          };
+          log.info('DRY RUN: Skipped database VideoRecord creation');
+        }
 
         const uniquenessScore = await computeUniquenessScore(videoRecord);
         log.info(`Uniqueness score (Analytics only): ${uniquenessScore}/100`);
@@ -193,87 +213,101 @@ async function main() {
         log.info(`Published: ${publishResult.url} (ID: ${publishResult.platformVideoId})`);
 
         // 12. Update video record & Channel recentTopics
-        await VideoRecord.findByIdAndUpdate(videoRecord._id, {
-          videoId: publishResult.platformVideoId,
-          status: publishResult.status || 'uploaded',
-          uploadDate: new Date(),
-          uniquenessScore,
-          affiliateLinksUsed: affiliateData ? [affiliateData.programId] : []
-        });
+        if (!isDryRun) {
+          await VideoRecord.findByIdAndUpdate(videoRecord._id, {
+            videoId: publishResult.platformVideoId,
+            status: publishResult.status || 'uploaded',
+            uploadDate: new Date(),
+            uniquenessScore,
+            affiliateLinksUsed: affiliateData ? [affiliateData.programId] : []
+          });
 
-        await Channel.findByIdAndUpdate(channel._id, {
-          $push: {
-            'stats.recentTopics': {
-              $each: [job.topic],
-              $slice: -30
+          await Channel.findByIdAndUpdate(channel._id, {
+            $push: {
+              'stats.recentTopics': {
+                $each: [job.topic],
+                $slice: -30
+              }
             }
+          });
+
+          // 13. Mark topic as seen
+          await markAsSeen(job.topic, channel.accountId, channel.platform);
+
+          // 14. Post affiliate comment (with natural delay)
+          if (affiliateData) {
+            await injectAffiliateComment(publishResult, affiliateData, channel);
           }
-        });
 
-        // 13. Mark topic as seen
-        await markAsSeen(job.topic, channel.accountId, channel.platform);
+          // 15. Mark schedule slot as used
+          if (nextSlot) {
+            await markSlotUsed(channel.accountId, nextSlot, videoRecord._id);
+          }
 
-        // 14. Post affiliate comment (with natural delay)
-        if (affiliateData) {
-          await injectAffiliateComment(publishResult, affiliateData, channel);
-        }
-
-        // 15. Mark schedule slot as used
-        await markSlotUsed(channel.accountId, nextSlot, videoRecord._id);
-
-        // 16. Mark manual task as done
-        if (job.source === 'manual' && job.taskId) {
-          await completeTask(job.taskId, videoRecord._id);
+          // 16. Mark manual task as done
+          if (job.source === 'manual' && job.taskId) {
+            await completeTask(job.taskId, videoRecord._id);
+          }
+        } else {
+          log.info('DRY RUN: Skipped updating DB records, channel stats, marking slots, and posting comments.');
         }
 
         totalPublished++;
         log.info(`✅ Video published successfully: ${publishResult.url}`);
 
-        await SystemLog.create({
-          runId, event: 'video_published', module: 'orchestrator',
-          level: 'info',
-          payload: {
-            accountId: channel.accountId, videoId: publishResult.platformVideoId,
-            topic: job.topic, llmProvider, ttsProvider: voiceResult.provider,
-            uniquenessScore, durationSeconds: assembly.durationSeconds
-          },
-          timestamp: new Date()
-        });
+        if (!isDryRun) {
+          await SystemLog.create({
+            runId, event: 'video_published', module: 'orchestrator',
+            level: 'info',
+            payload: {
+              accountId: channel.accountId, videoId: publishResult.platformVideoId,
+              topic: job.topic, llmProvider, ttsProvider: voiceResult.provider,
+              uniquenessScore, durationSeconds: assembly.durationSeconds
+            },
+            timestamp: new Date()
+          });
+        }
 
       } catch (channelErr) {
         totalFailed++;
         log.error(`Channel ${channel.accountId} failed: ${channelErr.message}`);
         log.error(channelErr.stack);
 
-        await SystemLog.create({
-          runId, event: 'channel_error', module: 'orchestrator',
-          level: 'error',
-          payload: { accountId: channel.accountId, error: channelErr.message },
-          timestamp: new Date()
-        });
+        if (!isDryRun) {
+          await SystemLog.create({
+            runId, event: 'channel_error', module: 'orchestrator',
+            level: 'error',
+            payload: { accountId: channel.accountId, error: channelErr.message },
+            timestamp: new Date()
+          });
+        }
       }
     }
 
     log.info(`\nPipeline run ${runId} complete: ${totalPublished} published, ${totalFailed} failed`);
 
-    await SystemLog.create({
-      runId, event: 'pipeline_complete', module: 'orchestrator',
-      level: 'info',
-      payload: { totalPublished, totalFailed, endTime: new Date() },
-      timestamp: new Date()
-    });
+    if (!isDryRun) {
+      await SystemLog.create({
+        runId, event: 'pipeline_complete', module: 'orchestrator',
+        level: 'info',
+        payload: { totalPublished, totalFailed, endTime: new Date() },
+        timestamp: new Date()
+      });
+    }
 
   } catch (fatalErr) {
     log.error(`FATAL ERROR: ${fatalErr.message}`);
     log.error(fatalErr.stack);
 
-    try {
-      await SystemLog.create({
-        runId, event: 'pipeline_fatal', module: 'orchestrator',
-        level: 'error', payload: { error: fatalErr.message },
-        timestamp: new Date()
-      });
-    } catch {}
+    if (!isDryRun) {
+      try {
+        await SystemLog.create({
+          runId, event: 'pipeline_fatal', module: 'orchestrator',
+          level: 'error', payload: { error: fatalErr.message },
+          timestamp: new Date()
+        });
+      } catch {}
+    }
 
     process.exit(1);
 
