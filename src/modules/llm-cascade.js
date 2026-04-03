@@ -345,7 +345,7 @@ const providers = [
  */
 async function generateScript(topic, verticalId, channelPersona, topicMeta = {}) {
   const systemPrompt = buildSystemPrompt();
-  const userPrompt = buildUserPrompt(
+  const baseUserPrompt = buildUserPrompt(
     topic,
     topicMeta.source || 'auto-discovered',
     topicMeta.sourceUrl || '',
@@ -353,25 +353,39 @@ async function generateScript(topic, verticalId, channelPersona, topicMeta = {})
   );
 
   for (const provider of providers) {
-    // Check if provider should be skipped (5+ consecutive failures)
     if (await shouldSkipProvider(provider.name)) continue;
 
-    try {
-      log.info(`Trying ${provider.name}...`);
-      const rawText = await provider.generate(systemPrompt, userPrompt);
+    let lastError = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const userPrompt = attempt === 1 
+          ? baseUserPrompt 
+          : `${baseUserPrompt}\n\nCRITICAL FEEDBACK: Your previous attempt failed validation: "${lastError}". Please fix the JSON and ensure the script is 80-100 words AS STRICTLY REQUESTED.`;
 
-      if (!rawText) throw new Error('Empty response');
+        log.info(`Trying ${provider.name} (attempt ${attempt}/2)...`);
+        const rawText = await provider.generate(systemPrompt, userPrompt);
 
-      const parsed = parseScriptJSON(rawText);
-      if (!validateScript(parsed)) throw new Error('Invalid script structure — missing required fields');
+        if (!rawText) throw new Error('Empty response');
 
-      await recordProviderResult(provider.name, true);
-      log.info(`Script generated via ${provider.name} — "${parsed.youtube_title}"`);
-      return { script: parsed, provider: provider.name };
-    } catch (err) {
-      await recordProviderResult(provider.name, false);
-      log.warn(`${provider.name} failed: ${err.message}. Trying next...`);
-      continue;
+        const parsed = parseScriptJSON(rawText);
+        if (!validateScript(parsed)) throw new Error('Invalid script structure or length requirements not met');
+
+        await recordProviderResult(provider.name, true);
+        log.info(`Script generated via ${provider.name} — "${parsed.youtube_title}"`);
+        return { script: parsed, provider: provider.name };
+      } catch (err) {
+        lastError = err.message;
+        log.warn(`${provider.name} attempt ${attempt} failed: ${err.message}`);
+        
+        if (err.message.includes('404') || err.message.includes('429') || err.message.includes('not set')) {
+          break;
+        }
+        
+        if (attempt === 2) {
+          await recordProviderResult(provider.name, false);
+          log.warn(`${provider.name} exhausted. Moving to next provider...`);
+        }
+      }
     }
   }
 

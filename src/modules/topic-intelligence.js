@@ -6,7 +6,10 @@ const cheerio = require('cheerio');
 const RssParser = require('rss-parser');
 
 const log = getModuleLogger('topic-intelligence');
-const rssParser = new RssParser();
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
+const rssParser = new RssParser({
+  headers: { 'User-Agent': USER_AGENT }
+});
 
 // ============================================================
 // FAIL-FAST UNIQUENESS GUARD
@@ -38,7 +41,6 @@ function isDuplicateTopic(candidate, recentTopics) {
   return false;
 }
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
 const REQUEST_TIMEOUT = 10000;
 
 const TRENDING_KEYWORDS = [
@@ -203,7 +205,9 @@ async function fetchProductHunt() {
   const topics = [];
   try {
     const feed = await withRetry(async () => {
-      return rssParser.parseURL('https://www.producthunt.com/feed');
+      const res = await safeFetch('https://www.producthunt.com/feed');
+      const xml = await res.text();
+      return rssParser.parseString(xml);
     }, { maxRetries: 2, name: 'producthunt' });
     for (const item of (feed.items || []).slice(0, 20)) {
       topics.push({
@@ -243,7 +247,9 @@ async function fetchTechCrunch() {
   const topics = [];
   try {
     const feed = await withRetry(async () => {
-      return rssParser.parseURL('https://techcrunch.com/feed/');
+      const res = await safeFetch('https://techcrunch.com/feed/');
+      const xml = await res.text();
+      return rssParser.parseString(xml);
     }, { maxRetries: 2, name: 'techcrunch' });
     for (const item of (feed.items || []).slice(0, 20)) {
       const hasSaas = /SaaS|tool|platform|launch|startup|funding|raised/i.test(
@@ -264,7 +270,9 @@ async function fetchGoogleTrends() {
   const topics = [];
   try {
     const feed = await withRetry(async () => {
-      return rssParser.parseURL('https://trends.google.com/trending/rss?geo=US');
+      const res = await safeFetch('https://trends.google.com/trending/rss?geo=US');
+      const xml = await res.text();
+      return rssParser.parseString(xml);
     }, { maxRetries: 2, name: 'google-trends' });
     for (const item of (feed.items || []).slice(0, 15)) {
       topics.push({
