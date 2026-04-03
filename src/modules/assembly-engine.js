@@ -143,13 +143,25 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
 
   if (visualClips.length === 0) throw new Error('No visual clips provided to assembler');
 
+  // Loop logic (Action B): If scenes are too long, duplicate the array to trigger more cuts and loop the acquired scenes.
+  let activeClips = [...visualClips];
+  if (options.loopVisuals) {
+    const MAX_CLIP_DUR = 8; // Max 8 seconds per scene for high retention
+    let currentDur = audioDuration / activeClips.length;
+    while(currentDur > MAX_CLIP_DUR && activeClips.length < 25) {
+      activeClips = [...activeClips, ...visualClips];
+      currentDur = audioDuration / activeClips.length;
+    }
+    log.info(`[Loop Logic] Expanded ${visualClips.length} raw scenes to ${activeClips.length} dynamic cuts.`);
+  }
+
   // STEP 2: Standardise mixed media into perfect MP4 snippets
   log.info('Step 2: Pre-compiling Hybrid Media (Hard Cuts, No XFades)...');
-  const durationPerImage = audioDuration / visualClips.length;
+  const durationPerImage = audioDuration / activeClips.length;
   const segmentPaths = [];
 
-  for (let i = 0; i < visualClips.length; i++) {
-    const clip = visualClips[i];
+  for (let i = 0; i < activeClips.length; i++) {
+    const clip = activeClips[i];
     const segPath = path.join(buildDir, `scene_std_${i}.mp4`);
     const effectName = VALID_EFFECTS.includes(clip.effect) ? clip.effect : 'zoom_in';
     const frames = Math.round(durationPerImage * 30); // 30 FPS strict enforced
@@ -160,15 +172,15 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
         `ffmpeg -y -loop 1 -i "${clip.path}" -t ${durationPerImage} ` +
         `-vf "scale=1200:2140,${filterStr},setsar=1" ` +
         `-c:v libx264 -preset fast -pix_fmt yuv420p "${segPath}"`,
-        `Standarising Image ${i+1}/${visualClips.length} with ${effectName}`
+        `Standarising Image ${i+1}/${activeClips.length} with ${effectName}`
       );
     } else {
-      // It's a video. Must forcefully center-crop to 1080x1920 to prevent mismatches
+      // It's a video. MUST use -stream_loop -1 so stock videos seamlessly loop if durationPerImage exceeds original length
       await runFFmpeg(
-        `ffmpeg -y -i "${clip.path}" -t ${durationPerImage} ` +
+        `ffmpeg -y -stream_loop -1 -i "${clip.path}" -t ${durationPerImage} ` +
         `-vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30" ` +
         `-c:v libx264 -preset fast -pix_fmt yuv420p -an "${segPath}"`,
-        `Standarising Video ${i+1}/${visualClips.length}`
+        `Standarising Video ${i+1}/${activeClips.length}`
       );
     }
     segmentPaths.push(segPath);
