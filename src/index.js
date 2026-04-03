@@ -30,6 +30,8 @@ const log = getModuleLogger('orchestrator');
 async function main() {
   const runId = uuidv4();
   const tmpManager = new TmpManager('/tmp/build');
+  const isDryRun = process.argv.includes('--dry-run');
+  const forceNow = process.argv.includes('--force-now');
 
   try {
     // 0. Initialize
@@ -75,8 +77,6 @@ async function main() {
         const schedule = await getOrCreateTodaySchedule(channel.accountId);
         const now = new Date();
         const nextSlot = schedule.find(s => !s.used && s.time <= now);
-        const forceNow = process.argv.includes('--force-now');
-
         if (!forceNow && !nextSlot) {
           const futureSlots = schedule.filter(s => !s.used && s.time > now);
           if (futureSlots.length > 0) {
@@ -189,7 +189,7 @@ async function main() {
 
         // 11. Publish!
         log.info(`Publishing to ${channel.platform}...`);
-        const publishResult = await plugin.upload(assembly.videoPath, metadata, channel);
+        const publishResult = await plugin.upload(assembly.videoPath, metadata, channel, { isDryRun });
         log.info(`Published: ${publishResult.url} (ID: ${publishResult.platformVideoId})`);
 
         // 12. Update video record & Channel recentTopics

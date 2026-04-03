@@ -231,6 +231,10 @@ async function getOrCreateTodaySchedule(accountId) {
  * Mark a schedule slot as used.
  */
 async function markSlotUsed(accountId, slot, videoRecordId = null) {
+  if (!slot) {
+    log.info(`No slot provided to markSlotUsed (likely bypassed via --force-now). Skipping schedule update.`);
+    return;
+  }
   const today = new Date().toISOString().split('T')[0];
   await UploadSchedule.updateOne(
     { accountId, date: today, 'slots.time': slot.time },

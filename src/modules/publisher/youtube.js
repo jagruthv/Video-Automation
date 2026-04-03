@@ -40,7 +40,12 @@ class YouTubePublisher extends BasePublisher {
   /**
    * Upload a video to YouTube Shorts.
    */
-  async upload(videoPath, metadata, channel) {
+  async upload(videoPath, metadata, channel, config = {}) {
+    if (config.isDryRun) {
+      log.info("DRY RUN: Skipping actual YouTube upload. Video is ready at local path.");
+      return { success: true, url: "dry-run-bypass", platformVideoId: "dry-run" };
+    }
+
     const auth = await this._getAuthClient(channel);
     const youtube = google.youtube({ version: 'v3', auth });
 
