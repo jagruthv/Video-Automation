@@ -222,7 +222,7 @@ async function generateLlmResponse(provider, modelId, systemPrompt, userPrompt) 
         model: modelId, 
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], 
         temperature: 0.9, 
-        max_tokens: 2048, 
+        max_tokens: 4096,
         response_format: { type: "json_object" } 
       }),
       signal: AbortSignal.timeout(30000)
@@ -242,7 +242,7 @@ async function generateLlmResponse(provider, modelId, systemPrompt, userPrompt) 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], 
-        generationConfig: { temperature: 0.9, maxOutputTokens: 2048, responseMimeType: "application/json" } 
+        generationConfig: { temperature: 0.9, maxOutputTokens: 4096, responseMimeType: "application/json" } 
       }),
       signal: AbortSignal.timeout(40000)
     });

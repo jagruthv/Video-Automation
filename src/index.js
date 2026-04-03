@@ -117,7 +117,7 @@ async function main() {
           channel.contentPersona,
           { source: job.source, sourceUrl: job.sourceUrl, viralityScore: job.viralityScore }
         );
-        log.info(`Script generated via ${llmProvider}: "${script.youtube_title}"`);
+        log.info(`Script generated via ${llmProvider}: "${script.youtubeTitle || script.youtube_title || job.topic}"`);
 
         // 6. Generate voice audio
         log.info('Generating voice...');
