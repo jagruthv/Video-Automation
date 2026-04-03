@@ -69,7 +69,10 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
 
       - name: Run pipeline
-        run: node src/index.js ${{ github.event.inputs.force_now == 'true' && '--force-now' || '' }}
+        run: |
+          node src/index.js \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }} \
+            ${{ github.event.inputs.force_now == 'true' && '--force-now' || '' }}
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

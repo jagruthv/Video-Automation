@@ -30,8 +30,8 @@ const log = getModuleLogger('orchestrator');
 async function main() {
   const runId = uuidv4();
   const tmpManager = new TmpManager('/tmp/build');
-  const isDryRun = process.argv.includes('--dry-run');
-  const forceNow = process.argv.includes('--force-now');
+  const isDryRun = process.argv.includes('--dry-run') || process.env.DRY_RUN === 'true';
+  const forceNow = process.argv.includes('--force-now') || process.env.FORCE_NOW === 'true';
 
   try {
     // 0. Initialize
