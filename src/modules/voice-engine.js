@@ -100,6 +100,7 @@ function saveAudio(buffer, filePath) {
 // ============================================================
 async function generateVoice(scriptText, options = {}) {
   const outputPath = options.outputPath || '/tmp/build/audio/voice.mp3';
+  const { execSync } = require('child_process');
 
   log.info(`TTS: Starting Microsoft Edge TTS (${microsoftEdgeTTS.VOICE})...`);
 
@@ -109,19 +110,40 @@ async function generateVoice(scriptText, options = {}) {
       { maxRetries: 3, name: 'tts-edge', baseDelay: 2000 }
     );
 
-    // Edge TTS already saves to disk via .save(), log confirmation
     if (fs.existsSync(outputPath)) {
       log.info(`Audio saved: ${outputPath} (${(result.audioBuffer.length / 1024).toFixed(0)}KB)`);
     } else {
       saveAudio(result.audioBuffer, outputPath);
     }
 
-    log.info(`TTS: Edge TTS succeeded — ${result.durationMs}ms, voice: ${result.voice}`);
+    // Get TRUE duration via ffprobe — Edge TTS outputs at 80kbps MPEG2, not 128kbps.
+    // Byte-based estimation is 60% too short, causing subtitles to appear way too early.
+    let trueDurationMs = result.durationMs; // fallback estimate
+    try {
+      const ffprobeOut = execSync(
+        `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${outputPath}"`,
+        { encoding: 'utf8' }
+      ).trim();
+      const trueSec = parseFloat(ffprobeOut);
+      if (!isNaN(trueSec) && trueSec > 0) {
+        trueDurationMs = Math.round(trueSec * 1000);
+        log.info(`Audio duration (ffprobe): ${trueSec.toFixed(2)}s (estimated was ${(result.durationMs/1000).toFixed(2)}s)`);
+      }
+    } catch {
+      log.warn('ffprobe not available — using byte-estimate for word timestamps');
+    }
+
+    const wordTimestamps = estimateWordTimestamps(
+      scriptText.replace(/\[PAUSE_[\d.]+s\]/g, '').trim(),
+      trueDurationMs
+    );
+
+    log.info(`TTS: Edge TTS succeeded — ${trueDurationMs}ms, voice: ${result.voice}`);
 
     return {
       audioPath: outputPath,
-      wordTimestamps: result.wordTimestamps,
-      durationMs: result.durationMs,
+      wordTimestamps,
+      durationMs: trueDurationMs,
       provider: result.provider,
       voice: result.voice
     };

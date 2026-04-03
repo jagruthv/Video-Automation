@@ -260,10 +260,12 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
   // STEP 5: Final assembly with audio fade-out
   log.info('Step 5: Final assembly (audio fade-out + subtitle burn)...');
   const subsFilter = fs.existsSync(subsFile) ? `,ass=${subsFile.replace(/\\/g, '/')}` : '';
+  const fadeOutStart = Math.max(0, audioDuration - 2).toFixed(1);
   await runFFmpeg(
     `ffmpeg -y -i "${bgVideo}" -i "${audioMixed}" ` +
+    `-map 0:v:0 -map 1:a:0 ` +
     `-vf "fps=30${subsFilter}" ` +
-    `-af "afade=t=out:st=55:d=2" ` +
+    `-af "afade=t=out:st=${fadeOutStart}:d=1.5" ` +
     `-c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k ` +
     `-shortest -movflags +faststart "${finalOutput}"`,
     'Final video assembly'
