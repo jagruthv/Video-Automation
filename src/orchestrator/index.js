@@ -17,11 +17,10 @@ async function main() {
   
   try {
     tmpManager.create();
-    const topic = process.argv[2] || "The future of quantum computing";
-    log.info(`🚀 Starting AURA V2 Pipeline for topic: "${topic}"`);
+    log.info(`🚀 Starting AURA V2 Pipeline — Fully Autonomous Mode`);
 
-    // 1. Get JSON Script Package
-    const metadata = await generateScript(topic);
+    // 1. Gemini autonomously picks a format, topic, script, and visuals
+    const metadata = await generateScript();
 
     // 2. Run Voice and Visuals in Parallel
     log.info('Running audio and visual generation in parallel...');

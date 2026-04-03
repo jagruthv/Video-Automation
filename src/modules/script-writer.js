@@ -110,7 +110,7 @@ Return ONLY a raw JSON object. No markdown. No code fences. No explanation text.
 // ============================================================
 // MAIN: GENERATE SCRIPT
 // ============================================================
-async function generateScript(topic) {
+async function generateScript() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
 
@@ -121,14 +121,14 @@ async function generateScript(topic) {
   log.info(`🎬 Selected Content Format: ${selectedFormat.formatName}`);
 
   // Action C: Inject selectedFormat.systemInstruction into the Gemini API call
+  // Topic is NOT passed in — Gemini autonomously selects a unique, viral topic.
   const systemPrompt = `${selectedFormat.systemInstruction}
 
-TOPIC: ${topic}
+TOPIC SELECTION: Do NOT wait for a topic to be provided. Autonomously choose one highly unique, mind-blowing, or bizarre factual topic that is a perfect fit for the format above. Choose something that will make a viewer think "Wait, what?" — avoid anything generic. Surprise us.
 
 ${UNIVERSAL_RULES}`;
 
-  log.info(`Generating script via Gemini for topic: "${topic}"`);
-
+  log.info(`🎲 Letting Gemini autonomously choose topic and generate full package...`);
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
