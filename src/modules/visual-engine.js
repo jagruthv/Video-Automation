@@ -23,6 +23,38 @@ async function downloadFile(url, outputPath) {
 }
 
 /**
+ * Fetch an AI-generated video via Google Veo 3.1 (Whisk API)
+ * Timeout managed internally by API or by manual retry limits.
+ */
+async function fetchVeoVideo(query, outputPath) {
+  if (!process.env.GOOGLE_WHISK_COOKIE) throw new Error('GOOGLE_WHISK_COOKIE not set, skipping Veo');
+  
+  try {
+    const { Whisk } = require('@rohitaryal/whisk-api');
+    const whisk = new Whisk(process.env.GOOGLE_WHISK_COOKIE);
+    const VEO_MODELS = "VEO_3_1_I2V_12STEP";
+    
+    // Phase 1: Base Image
+    const images = await whisk.generateImage(query, 1);
+    if (!images || images.length === 0) throw new Error("Veo Phase 1: Image Generation Failed");
+    
+    // Phase 2: Animate (The prompt is optimized below by the LLM, we append a transition helper)
+    const animScript = `Cinematic slow, smooth transition for: ${query}. Perfect loop lighting.`;
+    const video = await images[0].animate(animScript, VEO_MODELS);
+    
+    // Phase 3: Transfer to pipeline location
+    const tempDir = path.dirname(outputPath);
+    const tempPath = video.save(tempDir);
+    fs.copyFileSync(tempPath, outputPath);
+    fs.unlinkSync(tempPath);
+    
+    return 'Google Veo 3.1';
+  } catch (error) {
+    throw new Error(`Veo Engine Error: ${error.message}`);
+  }
+}
+
+/**
  * Smart Keyword Extraction for Stock APIs — strips filler words, takes first 3 meaningful terms.
  */
 function extractKeywords(prompt) {
@@ -145,11 +177,25 @@ async function acquireImage(prompt, outputPath, sceneIndex) {
 
 /**
  * VIDEO FALLBACK CASCADE:
- *   1. Pexels Video (portrait, HD)
- *   2. Pollinations AI image using query as prompt (graceful downgrade)
+ *   1. Google Veo 3.1 (AI Video generation via Whisk)
+ *   2. Pexels Video (portrait, HD stock)
+ *   3. Pollinations AI image using query as prompt (graceful downgrade)
  */
 async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
-  // PRIMARY: Pexels Video
+  // PRIMARY: Google Veo 3.1 (Whisk)
+  try {
+    log.info(`Scene ${sceneIndex}: Google Veo 3.1 → "${query}"`);
+    // Veo generation is incredibly slow, so 1 retry only, and very patient timeout (3-5 minutes natively).
+    const provider = await withRetry(
+      () => fetchVeoVideo(query, videoPath),
+      { maxRetries: 1, name: `veo-video-${sceneIndex}`, baseDelay: 10000 }
+    );
+    return { path: videoPath, type: 'video', provider, attribution: 'Video by Google Veo' };
+  } catch (err) {
+    log.warn(`Scene ${sceneIndex}: Google Veo 3.1 failed (${err.message}). Falling back to Pexels Video...`);
+  }
+
+  // FALLBACK 1: Pexels Video
   try {
     log.info(`Scene ${sceneIndex}: Pexels Video → "${query}"`);
     const provider = await withRetry(
@@ -161,7 +207,7 @@ async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
     log.warn(`Scene ${sceneIndex}: Pexels Video failed (${err.message}). Falling back to Pollinations image...`);
   }
 
-  // FALLBACK: Pollinations AI image using the video query as image prompt
+  // FALLBACK 2: Pollinations AI image using the video query as image prompt
   const { provider, attribution } = await acquireImage(query, imageFallbackPath, sceneIndex);
   return { path: imageFallbackPath, type: 'image', provider, attribution };
 }

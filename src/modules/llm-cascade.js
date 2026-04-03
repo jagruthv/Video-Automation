@@ -44,6 +44,9 @@ Must follow this structure:
 - Call to action: "Subscribe to Vibecoder Daily for more tech updates!"
 - End with 10-15 relevant SEO hashtags (e.g., #AITech, #CodingShorts).
 
+VIDEO QUERY RULES:
+When defining a "query" for a "video" visual, keep in mind videos are only a few seconds long. You MUST append instructions for smooth transitions. Example: "hacker typing, cinematic smooth transition, 3-second short clip."
+
 OUTPUT FORMAT: Respond ONLY with a single valid JSON object. No markdown fences. No explanation:
 {
   "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only. MUST be minimum 100 words.",
