@@ -36,7 +36,7 @@
     "mongoose": "^8.9.0",
     "node-gtts": "^2.0.0",
     "rss-parser": "^3.13.0",
-    "uuid": "^10.0.0",
+    "uuid": "^13.0.0",
     "winston": "^3.17.0",
     "xml-escape": "^1.1.0"
   },
