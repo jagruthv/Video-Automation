@@ -33,8 +33,8 @@ VIDEO EFFECT RULES:
 For EVERY scene (whether video or image), pick EXACTLY ONE effect from this list: zoom_in, pan_right, cyberpunk_color, bw_hacker, glitch.
 
 LENGTH REQUIREMENT:
-Your script MUST be a minimum of 100 words. Explain the technical concepts in deep detail. If you write less than 100 words, the system will crash.
-The video must be at least 45 seconds long. Do not write short 30-word scripts.
+Your script MUST be between 85 and 130 words. Explain the technical concepts in deep detail. If you write less than 85 words or more than 130 words, the system will crash.
+The video must be visually engaging and precisely paced for YouTube Shorts.
 
 DESCRIPTION RULES:
 Write a high-energy English YouTube description. No other languages.
@@ -49,7 +49,7 @@ When defining a "query" for a "video" visual, keep in mind videos are only a few
 
 OUTPUT FORMAT: Respond ONLY with a single valid JSON object. No markdown fences. No explanation:
 {
-  "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only. MUST be minimum 100 words.",
+  "script": "The complete spoken text, with each sentence on its own line. No commas. Full stops only. MUST be between 85 and 130 words.",
   "visuals": [{"type": "video", "query": "hacker typing", "effect": "zoom_in"}, {"type": "image", "prompt": "photorealistic glowing cyberpunk robot, 8k", "effect": "cyberpunk_color"}],
   "youtubeTitle": "Max 70 chars. High energy. 1 emoji. Include #shorts.",
   "youtubeDescription": "English-only description following exact structure above.",
@@ -88,7 +88,7 @@ Source URL: ${sourceUrl}
 Virality Score: ${viralityScore}/100
 
 You are the Vibecoder AI Director. Output the JSON object now.
-RULE: Your script MUST be a minimum of 100 words. Explain technical concepts in deep detail. If you write less than 100 words, the system will crash.
+RULE: Your script MUST be between 85 and 130 words. Explain technical concepts in deep detail without being wordy. If you fail the word count constraints, the system will crash.
 No markdown. No explanation. Start your response with { and end with }.`;
 }
 
@@ -128,11 +128,14 @@ function parseScriptJSON(text) {
 function validateScript(script) {
   if (!script || typeof script !== 'object') return false;
   if (!script.script) return false;
-  
-  // Enforce 100-word minimum — triggers feedback retry on lazy LLMs
+
+  // Enforce 85-130 word limits — triggers feedback retry on lazy or verbose LLMs
   const wordCount = script.script.split(/\s+/).filter(w => w.length > 0).length;
-  if (wordCount < 100) {
-    throw new Error(`Script length validation failed: Only ${wordCount} words (minimum 100 strictly required — system will reject shorter scripts.)`);
+  if (wordCount < 85) {
+    throw new Error(`Script length validation failed: Only ${wordCount} words (minimum 85 strictly required). Expand the technical details.`);
+  }
+  if (wordCount > 130) {
+    throw new Error(`Script length validation failed: ${wordCount} words is TOO LONG (maximum 130 words allowed for YouTube Shorts). Please shorten it to be punchy.`);
   }
 
   // Validate all required structural fields
@@ -217,44 +220,44 @@ async function generateLlmResponse(provider, modelId, systemPrompt, userPrompt) 
   if (provider === 'groq') {
     const key = process.env.GROQ_API_KEY;
     if (!key) throw new Error('GROQ_API_KEY not set');
-    
+
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST', 
+      method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ 
-        model: modelId, 
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }], 
-        temperature: 0.9, 
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+        temperature: 0.9,
         max_tokens: 4096,
-        response_format: { type: "json_object" } 
+        response_format: { type: "json_object" }
       }),
       signal: AbortSignal.timeout(30000)
     });
-    
+
     if (!res.ok) throw new Error(`Groq HTTP ${res.status}: ${await res.text()}`);
     const data = await res.json();
     return data?.choices?.[0]?.message?.content;
-  } 
-  
+  }
+
   if (provider === 'gemini') {
     const key = process.env.GEMINI_API_KEY;
     if (!key) throw new Error('GEMINI_API_KEY not set');
-    
+
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${key}`, {
-      method: 'POST', 
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }], 
-        generationConfig: { temperature: 0.9, maxOutputTokens: 4096, responseMimeType: "application/json" } 
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
+        generationConfig: { temperature: 0.9, maxOutputTokens: 4096, responseMimeType: "application/json" }
       }),
       signal: AbortSignal.timeout(40000)
     });
-    
+
     if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
     const data = await res.json();
     return data?.candidates?.[0]?.content?.parts?.[0]?.text;
   }
-  
+
   throw new Error(`Unknown provider: ${provider}`);
 }
 
@@ -269,7 +272,7 @@ async function generateLlmResponse(provider, modelId, systemPrompt, userPrompt) 
  * @param {Object} topicMeta - { source, sourceUrl, viralityScore }
  * @returns {Promise<{script: Object, provider: string}>}
  */
-async function generateScript(topic, verticalId, channelPersona, topicMeta = {}) {
+async function generateScript(topic, verticalId, channelPersona, topicMeta = {}, extraFeedback = null) {
   const systemPrompt = buildSystemPrompt();
   const baseUserPrompt = buildUserPrompt(
     topic,
@@ -280,15 +283,15 @@ async function generateScript(topic, verticalId, channelPersona, topicMeta = {})
 
   for (const model of modelCascade) {
     const identifier = `${model.provider}-${model.id}`;
-    
+
     if (await shouldSkipProvider(identifier)) continue;
 
     let lastError = null;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        const userPrompt = attempt === 1 
-          ? baseUserPrompt 
-          : `${baseUserPrompt}\n\nCRITICAL FEEDBACK: Your previous attempt failed validation: "${lastError}". Please fix the JSON and ensure the script is 80-100 words AS STRICTLY REQUESTED.`;
+        const userPrompt = attempt === 1
+          ? (extraFeedback ? `${baseUserPrompt}\n\nCRITICAL EXTERNAL FEEDBACK: ${extraFeedback}` : baseUserPrompt)
+          : `${baseUserPrompt}\n\nCRITICAL FEEDBACK: Your previous attempt failed validation: "${lastError}". Please fix the JSON and follow the length constraints STRICTLY.`;
 
         log.info(`Trying ${identifier} (attempt ${attempt}/2)...`);
         const rawText = await generateLlmResponse(model.provider, model.id, systemPrompt, userPrompt);
@@ -304,11 +307,11 @@ async function generateScript(topic, verticalId, channelPersona, topicMeta = {})
       } catch (err) {
         lastError = err.message;
         log.warn(`${identifier} attempt ${attempt} failed: ${err.message}`);
-        
+
         if (err.message.includes('404') || err.message.includes('429') || err.message.includes('not set')) {
           break; // Skip retry and move to next model if API key issue or rate limit
         }
-        
+
         if (attempt === 2) {
           await recordProviderResult(identifier, false);
           log.warn(`${identifier} exhausted. Moving to next provider...`);

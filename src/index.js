@@ -113,23 +113,46 @@ async function main() {
 
         log.info(`Topic: "${job.topic}" (source: ${job.source})`);
 
-        // 5. Generate script via LLM cascade
-        log.info('Generating script...');
-        const { script, provider: llmProvider } = await generateScript(
-          job.topic,
-          channel.verticalId,
-          channel.contentPersona,
-          { source: job.source, sourceUrl: job.sourceUrl, viralityScore: job.viralityScore }
-        );
-        log.info(`Script generated via ${llmProvider}: "${script.youtubeTitle || script.youtube_title || job.topic}"`);
+        // 5 & 6. Generate script & audio with duration safety loop
+        let script, llmProvider, voiceResult;
+        let generationOuterAttempt = 1;
+        let feedback = null;
 
-        // 6. Generate voice audio
-        log.info('Generating voice...');
-        const voiceResult = await generateVoice(script.script, {
-          accountId: channel.accountId,
-          outputPath: tmpManager.subpath('audio', 'voice.mp3')
-        });
-        log.info(`Voice: ${voiceResult.provider} (${voiceResult.voice}), ${voiceResult.durationMs}ms`);
+        while (generationOuterAttempt <= 2) {
+          log.info(`Generating script (Outer loop attempt ${generationOuterAttempt}/2)...`);
+          const scriptData = await generateScript(
+            job.topic,
+            channel.verticalId,
+            channel.contentPersona,
+            { source: job.source, sourceUrl: job.sourceUrl, viralityScore: job.viralityScore },
+            feedback
+          );
+          script = scriptData.script;
+          llmProvider = scriptData.provider;
+          log.info(`Script generated via ${llmProvider}: "${script.youtubeTitle || script.youtube_title || job.topic}"`);
+
+          log.info('Generating voice...');
+          voiceResult = await generateVoice(script.script, {
+            accountId: channel.accountId,
+            outputPath: tmpManager.subpath('audio', 'voice.mp3')
+          });
+          log.info(`Voice: ${voiceResult.provider} (${voiceResult.voice}), ${voiceResult.durationMs}ms`);
+
+          // Calculate strict final video length (incorporating 10% slowdown and 1s tail silence)
+          const projectedDurationMs = (voiceResult.durationMs / 0.9) + 1000;
+          if (projectedDurationMs <= 59000) {
+            break; // Success! It will easily fit in YouTube Shorts limit
+          }
+
+          log.warn(`Projected video duration too long for YouTube Shorts: ${(projectedDurationMs / 1000).toFixed(1)}s (Max 59.0s).`);
+          feedback = `Your previous script generated a voiceover duration of ${(projectedDurationMs / 1000).toFixed(1)} seconds, which EXCEEDS the YouTube Shorts 60.0s strict limit! Reduce the word count materially to hit around 45 seconds total.`;
+          generationOuterAttempt++;
+        }
+
+        const finalProjectedDuration = (voiceResult.durationMs / 0.9) + 1000;
+        if (finalProjectedDuration > 59500) {
+           throw new Error(`Failed to generate a video under 60.0 seconds after 2 attempts (Final: ${(finalProjectedDuration / 1000).toFixed(1)}s). Aborting to save rendering credits.`);
+        }
 
         // 7. Acquire background visuals
         log.info('Acquiring visuals...');
@@ -253,7 +276,11 @@ async function main() {
         }
 
         totalPublished++;
-        log.info(`✅ Video published successfully: ${publishResult.url}`);
+        if (isDryRun) {
+          log.info(`✅ DRY RUN: Execution complete. The video "${publishResult.url}" was generated locally but NOT uploaded.`);
+        } else {
+          log.info(`✅ Video published successfully: ${publishResult.url}`);
+        }
 
         if (!isDryRun) {
           await SystemLog.create({
