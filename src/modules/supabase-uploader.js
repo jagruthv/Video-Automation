@@ -11,9 +11,20 @@ console.log('DEBUG: SUPABASE_URL starts with:', process.env.SUPABASE_URL ? proce
 
 let supabase;
 try {
+  // Use a custom fetch wrapper to inject duplex block and enforce 120s timeout globally
   supabase = createClient(
     process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_KEY
+    process.env.SUPABASE_SERVICE_KEY,
+    {
+      auth: { persistSession: false },
+      global: {
+        fetch: (url, options = {}) => {
+          options.duplex = 'half'; // Required for Node 20+ stream/buffer uploads
+          options.signal = AbortSignal.timeout(120000); // 120 seconds timeout lock
+          return fetch(url, options);
+        }
+      }
+    }
   );
 } catch (err) {
   log.error(`FAILED TO INIT SUPABASE CLIENT. CHECK IF URL IN GITHUB SECRETS STARTS WITH HTTPS://.`);
@@ -25,30 +36,51 @@ try {
 async function uploadToStaging(videoPath, metadata) {
   log.info(`Initiating Supabase staging for: ${path.basename(videoPath)}`);
 
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_KEY;
-
-  if (!url || !key) {
-    throw new Error('Supabase environment variables (URL/KEY) are missing.');
-  }
-
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
-
   try {
-    // Action A: Upload to Storage
     if (!fs.existsSync(videoPath)) throw new Error(`Video not found: ${videoPath}`);
     
-    const fileBuffer = fs.readFileSync(videoPath);
+    // 1. Use fs.promises.readFile(videoPath) to get the buffer
+    const fileBuffer = await fs.promises.readFile(videoPath);
     const filename = `${Date.now()}.mp4`;
     const storagePath = `uploads/${filename}`;
 
-    log.info(`Uploading file to bucket 'aura_videos' as '${storagePath}'...`);
+    // 4. Add a log: "📦 Uploading 25MB+ payload to Supabase... Standby."
+    log.info(`📦 Uploading 25MB+ payload to Supabase... Standby. (Path: ${storagePath})`);
 
-    const { error: uploadError } = await supabase.storage
-      .from('aura_videos')
-      .upload(storagePath, fileBuffer, { contentType: 'video/mp4', upsert: false });
+    // 2. Wrap the storage.from().upload() in a retry loop (3 attempts).
+    let uploadError = null;
+    let success = false;
+    
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const { error } = await supabase.storage
+          .from('aura_videos')
+          .upload(storagePath, fileBuffer, { 
+            contentType: 'video/mp4', 
+            upsert: false,
+            // 3. Add duplex: 'half' to the fetch options
+            duplex: 'half' 
+          });
+          
+        if (error) {
+          uploadError = error;
+        } else {
+          success = true;
+          break; // Upload passed!
+        }
+      } catch (err) {
+        uploadError = err;
+      }
+      
+      if (!success) {
+        log.warn(`Upload attempt ${attempt}/3 failed: ${uploadError.message}. Retrying...`);
+        await new Promise(r => setTimeout(r, 5000));
+      }
+    }
 
-    if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+    if (!success) {
+      throw new Error(`Storage upload critically failed after 3 attempts: ${uploadError.message}`);
+    }
 
     // Action B: Retrieve Public URL
     const { data: urlData } = supabase.storage
@@ -58,7 +90,7 @@ async function uploadToStaging(videoPath, metadata) {
     const videoUrl = urlData?.publicUrl;
     if (!videoUrl) throw new Error('Failed to retrieve public URL from Supabase.');
 
-    // Action C: Insert into aurq_queue table
+    // Action C: Insert into aura_queue table
     const queueRow = {
       title: metadata.title || 'Untitled',
       tags: metadata.tags || [],
