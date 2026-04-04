@@ -81,7 +81,7 @@ VISUAL PROMPT RULES (MANDATORY FOR ALL FORMATS):
 - Ensure visual prompts focus only on the physical action, as the global_style_anchor will dictate the look. (e.g., "Massive ship sailing on calm ocean").
 - We need rapid visual changes! A new visual prompt every 10-15 words.
 - Each visual prompt MUST directly visualize what is being said in that moment of the script.
-- Anonymous human body parts (eyes, hands, silhouettes, POV shots, extreme close-ups) are ALLOWED.
+- CRITICAL: Every single visual prompt MUST start with the exact phrase: 'Wide-angle establishing shot, subject fully visible from a distance, 35mm lens'. You are strictly forbidden from generating prompts that focus on small details, textures, or faces.
 - DO NOT include specific named people, recognizable celebrities, or identifiable public figures.
 
 SCRIPT RULES (MANDATORY):
