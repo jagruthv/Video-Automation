@@ -77,11 +77,10 @@ SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. Engl
 // ============================================================
 const UNIVERSAL_RULES = `
 VISUAL PROMPT RULES (MANDATORY FOR ALL FORMATS):
-- Generate exactly 8 to 10 visual prompts — one for every few seconds of the script.
-- Ensure visual prompts focus only on the physical action, as the global_style_anchor will dictate the look. (e.g., "Massive ship sailing on calm ocean").
-- We need rapid visual changes! A new visual prompt every 10-15 words.
-- Each visual prompt MUST directly visualize what is being said in that moment of the script.
-- CRITICAL: Every single visual prompt MUST start with the exact phrase: 'Wide-angle establishing shot, subject fully visible from a distance, 35mm lens'. You are strictly forbidden from generating prompts that focus on small details, textures, or faces.
+- Generate exactly 8 to 10 visual scene objects — one for every few seconds of the script.
+- Each scene MUST have an 'image_prompt' and a 'motion_prompt'.
+- image_prompt: CRITICAL: Must start with 'Wide-angle establishing shot, subject fully visible from a distance, 35mm lens'. Focus on physical action only. Forbidden from textures, faces, close-ups.
+- motion_prompt: A cinematic camera motion directive (e.g. 'Cinematic slow zoom in, fog rolling across the scene', 'Camera pans left, slow dolly forward', 'Handheld shake, subject approached from behind').
 - DO NOT include specific named people, recognizable celebrities, or identifiable public figures.
 
 SCRIPT RULES (MANDATORY):
@@ -96,14 +95,10 @@ Return ONLY a raw JSON object. No markdown. No code fences. No explanation text.
   "global_style_anchor": "A highly detailed, 15-word visual style description (e.g., 'hyper-realistic 3D render, dark cinematic lighting, highly detailed textures')",
   "global_seed": 123456,
   "visuals": [
-    "Action-focused cinematic scene for beat 1",
-    "Action-focused cinematic scene for beat 2",
-    "Action-focused cinematic scene for beat 3",
-    "Action-focused cinematic scene for beat 4",
-    "Action-focused cinematic scene for beat 5",
-    "Action-focused cinematic scene for beat 6",
-    "Action-focused cinematic scene for beat 7",
-    "Action-focused cinematic scene for beat 8"
+    { "image_prompt": "Wide-angle establishing shot, subject fully visible from a distance, 35mm lens. Scene action description 1.", "motion_prompt": "Cinematic slow zoom in, fog rolling across the scene" },
+    { "image_prompt": "Wide-angle establishing shot, subject fully visible from a distance, 35mm lens. Scene action description 2.", "motion_prompt": "Camera pans left across the horizon" },
+    { "image_prompt": "Wide-angle establishing shot, subject fully visible from a distance, 35mm lens. Scene action description 3.", "motion_prompt": "Slow dolly forward, sunlight flickering through trees" },
+    { "image_prompt": "Wide-angle establishing shot, subject fully visible from a distance, 35mm lens. Scene action description 4.", "motion_prompt": "Birds-eye crane shot slowly descending" }
   ],
   "tags": ["tag1","tag2","tag3","tag4","tag5"]
 }`;
