@@ -316,20 +316,41 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
     { encoding: 'utf8' }
   ).trim());
 
-  if (outDuration < 10 || outDuration > 65) {
-    log.warn(`Output duration ${outDuration}s is outside expected 10-65s range`);
+  let deliveredVideoPath = finalOutput;
+  let finalDurationSec = outDuration;
+
+  if (outDuration > 59.5 && outDuration <= 66.0) {
+    log.info(`Output duration (${outDuration.toFixed(1)}s) slightly exceeds YouTube Shorts limits! Squeezing to 59.0s...`);
+    const speedupPath = path.join(outputDir, `aura_spedup_${Date.now()}.mp4`);
+    const targetSecs = 59.0;
+    const speedFactor = outDuration / targetSecs;
+    const ptsFactor = targetSecs / outDuration;
+
+    await runFFmpeg(
+      `ffmpeg -y -i "${finalOutput}" -filter_complex "[0:v]setpts=${ptsFactor.toFixed(5)}*PTS[v];[0:a]atempo=${speedFactor.toFixed(5)}[a]" -map "[v]" -map "[a]" -c:v libx264 -preset fast -crf 23 -c:a aac -b:a 128k "${speedupPath}"`,
+      `Squeezing video from ${outDuration.toFixed(1)}s to 59.0s`
+    );
+
+    deliveredVideoPath = speedupPath;
+    finalDurationSec = 59.0;
+    if (fs.existsSync(finalOutput)) fs.unlinkSync(finalOutput);
+  } else if (outDuration > 66.0) {
+    throw new Error(`CRITICAL: Final video duration ${outDuration.toFixed(1)}s exceeded absolute absolute maximum threshold!`);
+  } else if (outDuration < 10) {
+    log.warn(`Output duration ${outDuration.toFixed(1)}s is unusually short.`);
   }
 
-  const fileSizeMB = stat.size / (1024 * 1024);
-  log.info(`✅ Video assembled: ${finalOutput} (${outDuration.toFixed(1)}s, ${fileSizeMB.toFixed(1)}MB)`);
+  const statFinal = fs.statSync(deliveredVideoPath);
+  const fileSizeMB = statFinal.size / (1024 * 1024);
+  log.info(`✅ Video assembled: ${deliveredVideoPath} (${finalDurationSec.toFixed(1)}s, ${fileSizeMB.toFixed(1)}MB)`);
 
   for (const f of [audioNorm, bgVideo, audioMixed, subsFile]) {
     try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch {}
   }
 
   return {
-    videoPath: finalOutput,
-    durationSeconds: Math.round(outDuration),
+    videoPath: deliveredVideoPath,
+    durationSeconds: Math.round(finalDurationSec),
     fileSizeMB: Math.round(fileSizeMB * 10) / 10
   };
 }

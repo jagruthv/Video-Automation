@@ -19,19 +19,32 @@ async function main() {
     tmpManager.create();
     log.info(`🚀 Starting AURA V2 Pipeline — Fully Autonomous Mode`);
 
-    // 1. Gemini autonomously picks a format, topic, script, and visuals
-    const metadata = await generateScript();
+    // 1 & 2: Loop until we get a script under 64 seconds
+    let metadata, voiceResult;
+    let attempt = 0;
+    while (attempt < 5) {
+      attempt++;
+      log.info(`[Attempt ${attempt}/5] Generating Script & Audio...`);
+      metadata = await generateScript();
+      
+      voiceResult = await generateVoice(metadata.script, { 
+        outputPath: tmpManager.subpath('audio', 'voice.mp3') 
+      });
 
-    // 2. Run Voice and Visuals in Parallel
-    log.info('Running audio and visual generation in parallel...');
-    const audioTask = generateVoice(metadata.script, { 
-      outputPath: tmpManager.subpath('audio', 'voice.mp3') 
-    });
-    
-    // acquireVisuals in V2 takes an array of prompts
-    const visualTask = acquireVisuals(metadata, 45000, tmpManager.subpath('clips', ''));
+      // Normalization adds 1s, so 64s audio -> 65s final video.
+      if (voiceResult.durationMs > 64000) {
+        log.warn(`⚠️ Script generated audio of ${(voiceResult.durationMs/1000).toFixed(1)}s, which is > 64s! Restarting Gemini...`);
+        continue;
+      }
+      break; 
+    }
 
-    const [voiceResult, visualsResult] = await Promise.all([audioTask, visualTask]);
+    if (voiceResult.durationMs > 64000) throw new Error('Failed to generate a script under 64s after 5 attempts');
+
+    // 3. Run Visuals (now that we know audio fits)
+    log.info('Running visual generation...');
+    const visualTask = await acquireVisuals(metadata, voiceResult.durationMs, tmpManager.subpath('clips', ''));
+    const visualsResult = visualTask;
     log.info('Audio and visual assets successfully generated.');
 
     // 3. FFmpeg Assembly
