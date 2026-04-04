@@ -31,7 +31,8 @@ const microsoftEdgeTTS = {
 
     const communicate = new Communicate(cleanText, {
       voice: voiceName,
-      rate: '-5%',    // Slightly slower for dramatic "facts" pacing
+      rate: '+5%',    // Sped up to match energetic short-form pacing
+      volume: '+100%', // Increased base volume
       pitch: '-5Hz'   // Lower pitch for deep bass resonance
     });
 
