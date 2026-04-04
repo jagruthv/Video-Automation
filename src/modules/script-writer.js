@@ -77,13 +77,12 @@ SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. Engl
 // ============================================================
 const UNIVERSAL_RULES = `
 VISUAL PROMPT RULES (MANDATORY FOR ALL FORMATS):
-- Generate exactly 8 to 10 hyper-literal Veo 3.1 video prompts — one for every few seconds of the script.
+- Generate exactly 8 to 10 visual prompts — one for every few seconds of the script.
+- Ensure visual prompts focus only on the physical action, as the global_style_anchor will dictate the look. (e.g., "Massive ship sailing on calm ocean").
 - We need rapid visual changes! A new visual prompt every 10-15 words.
 - Each visual prompt MUST directly visualize what is being said in that moment of the script.
 - Anonymous human body parts (eyes, hands, silhouettes, POV shots, extreme close-ups) are ALLOWED.
 - DO NOT include specific named people, recognizable celebrities, or identifiable public figures.
-- Use diverse shot styles: macro lens, POV, silhouette, aerial, 3D abstract render, extreme close-up.
-- CRITICAL FORMAT RULE: Every single visual prompt MUST end with the exact phrase: "4k, hyper-realistic, slow pan right"
 
 SCRIPT RULES (MANDATORY):
 - DO NOT include any spoken calls to action (like "subscribe", "like", or "comment"). The system handles this via a visual overlay.
@@ -94,15 +93,17 @@ Return ONLY a raw JSON object. No markdown. No code fences. No explanation text.
 {
   "title": "High-energy viral YouTube title with a strong curiosity gap",
   "script": "Full spoken voiceover. Follows the selected format structure. Max 110 words. Full stops only.",
+  "global_style_anchor": "A highly detailed, 15-word visual style description (e.g., 'hyper-realistic 3D render, dark cinematic lighting, highly detailed textures')",
+  "global_seed": 123456,
   "visuals": [
-    "Hyper-literal cinematic scene for beat 1. 4k, hyper-realistic, slow pan right",
-    "Hyper-literal cinematic scene for beat 2. 4k, hyper-realistic, slow pan right",
-    "Hyper-literal cinematic scene for beat 3. 4k, hyper-realistic, slow pan right",
-    "Hyper-literal cinematic scene for beat 4. 4k, hyper-realistic, slow pan right",
-    "Hyper-literal cinematic scene for beat 5. 4k, hyper-realistic, slow pan right",
-    "Hyper-literal cinematic scene for beat 6. 4k, hyper-realistic, slow pan right",
-    "Hyper-literal cinematic scene for beat 7. 4k, hyper-realistic, slow pan right",
-    "Hyper-literal cinematic scene for beat 8. 4k, hyper-realistic, slow pan right"
+    "Action-focused cinematic scene for beat 1",
+    "Action-focused cinematic scene for beat 2",
+    "Action-focused cinematic scene for beat 3",
+    "Action-focused cinematic scene for beat 4",
+    "Action-focused cinematic scene for beat 5",
+    "Action-focused cinematic scene for beat 6",
+    "Action-focused cinematic scene for beat 7",
+    "Action-focused cinematic scene for beat 8"
   ],
   "tags": ["tag1","tag2","tag3","tag4","tag5"]
 }`;
@@ -156,17 +157,8 @@ ${UNIVERSAL_RULES}`;
   try {
     const parsed = JSON.parse(rawText);
 
-    // Enforce the required suffix on every visual prompt as a post-processing guard
-    if (Array.isArray(parsed.visuals)) {
-      parsed.visuals = parsed.visuals.map((v, i) => {
-        const trimmed = (v || '').trim();
-        if (!trimmed.endsWith('4k, hyper-realistic, slow pan right')) {
-          log.warn(`Visual ${i + 1} missing required suffix — appending.`);
-          return trimmed + '. 4k, hyper-realistic, slow pan right';
-        }
-        return trimmed;
-      });
-    }
+    // The script-writer no longer forcibly appends the '4k, hyper-realistic...' suffix
+    // because the global_style_anchor handles the unified aesthetic across all scenes.
 
     log.info(`✅ Script package generated. Format: "${selectedFormat.formatName}", Visuals: ${parsed.visuals?.length}`);
     return parsed;
