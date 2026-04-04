@@ -80,12 +80,22 @@ function estimateWordTimestamps(text, totalDurationMs) {
   const words = text.split(/\s+/).filter(w => w.length > 0);
   if (words.length === 0) return [];
 
-  const msPerWord = totalDurationMs / words.length;
-  return words.map((word, i) => ({
-    word: word.replace(/[^a-zA-Z0-9']/g, ''),
-    startMs: Math.round(i * msPerWord),
-    endMs: Math.round((i + 1) * msPerWord)
-  }));
+  // Use character proportion for hyper-accurate lip sync
+  const totalChars = words.reduce((sum, w) => sum + w.length, 0);
+  let currentMs = 0;
+
+  return words.map(w => {
+    const duration = (w.length / totalChars) * totalDurationMs;
+    const startMs = currentMs;
+    const endMs = currentMs + duration;
+    currentMs = endMs;
+
+    return {
+      word: w.replace(/[^a-zA-Z0-9']/g, ''),
+      startMs: Math.round(startMs),
+      endMs: Math.round(endMs)
+    };
+  });
 }
 
 function saveAudio(buffer, filePath) {

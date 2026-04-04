@@ -59,8 +59,7 @@ WrapStyle: 1
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: White,Arial Black,72,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,5,2,5,40,40,960,1
-Style: Yellow,Arial Black,72,&H0000FFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,5,2,5,40,40,960,1
+Style: Main,Arial Black,76,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,5,2,5,40,40,960,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -69,29 +68,36 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   const events = [];
   const filteredWords = wordTimestamps.filter(w => w.word && w.word.trim().length > 0);
 
-  // atempo=0.9 means audio is 1/0.9x longer — scale timestamps accordingly
-  const timeScale = 1 / 0.9;
-
-  // Show 2 words at a time, alternating Yellow/White style per word
-  const chunkSize = 2;
+  // Show 3 words at a time. The active word is highlighted yellow, the rest stay white.
+  // This creates a smooth, professional retention editing style without exhausting flickering.
+  const chunkSize = 3;
   for (let i = 0; i < filteredWords.length; i += chunkSize) {
     const chunk = filteredWords.slice(i, i + chunkSize);
     if (!chunk.length) continue;
 
-    const chunkStart = chunk[0].startMs * timeScale;
-    const chunkEnd = chunk[chunk.length - 1].endMs * timeScale;
+    const chunkEnd = chunk[chunk.length - 1].endMs;
 
-    // Each word in the chunk flashes individually with its own colour
+    // Highlight each word sequentially over the chunk's total screen time
     for (let w = 0; w < chunk.length; w++) {
-      const wordStart = chunk[w].startMs * timeScale;
-      const wordEnd = w < chunk.length - 1 ? chunk[w + 1].startMs * timeScale : chunkEnd;
-      const style = (i / chunkSize + w) % 2 === 0 ? 'Yellow' : 'White';
+      const wordStart = chunk[w].startMs;
+      const wordEnd = w < chunk.length - 1 ? chunk[w + 1].startMs : chunkEnd;
+      
+      let textLine = '';
+      for (let j = 0; j < chunk.length; j++) {
+         const cleanWord = chunk[j].word;
+         if (j === w) {
+             textLine += `{\\c&H00FFFF&}${cleanWord}{\\c&HFFFFFF&} `; // Yellow highlight
+         } else {
+             textLine += `${cleanWord} `; // White context
+         }
+      }
+      textLine = textLine.trim();
 
-      // Popping animation: slight scale-up on entry using \t transform
-      const word = chunk[w].word.replace(/[{}\\]/g, '');
-      const popAnim = `{\\fscx120\\fscy120\\t(0,80,\\fscx100\\fscy100)}`;
+      // Only pop the entire block when it first appears.
+      const popAnim = w === 0 ? `{\\fscx110\\fscy110\\t(0,100,\\fscx100\\fscy100)}` : '';
+      
       events.push(
-        `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},${style},,0,0,0,,${popAnim}${word}`
+        `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Main,,0,0,0,,${popAnim}${textLine}`
       );
     }
   }
@@ -99,7 +105,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(outputPath, header + events.join('\n') + '\n');
-  log.info(`ASS subtitles: ${events.length} events generated (center-screen, alternating yellow/white)`);
+  log.info(`ASS subtitles: ${events.length} events generated (Smart Chunking, 3 words/screen)`);
 }
 
 function formatASSTime(ms) {
@@ -173,9 +179,9 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
   const finalOutput = path.join(outputDir, `aura_${Date.now()}.mp4`);
 
   // STEP 1: Normalize audio
-  log.info('Step 1: Normalizing audio (atempo=0.9 + 1s tail silence)...');
+  log.info('Step 1: Normalizing audio (1s tail silence)...');
   await runFFmpeg(
-    `ffmpeg -y -i "${audioPath}" -af "atempo=0.9,loudnorm=I=-14:LRA=11:TP=-1.5,apad=pad_dur=1" -ar 48000 -ac 1 "${audioNorm}"`,
+    `ffmpeg -y -i "${audioPath}" -af "loudnorm=I=-14:LRA=11:TP=-1.5,apad=pad_dur=1" -ar 48000 -ac 1 "${audioNorm}"`,
     'Normalize audio'
   );
 
