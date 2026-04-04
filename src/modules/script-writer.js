@@ -69,8 +69,20 @@ BODY: Tell the story in 3 fast-paced acts. Each act reveals a surprising new det
 - THE CLIMAX: The most unexpected final detail.
 OUTRO: "Have you heard this story before?"
 SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
+  },
+  {
+    formatName: 'Hidden Historical Truth',
+    systemInstruction: `You are an elite YouTube Shorts visual storyteller.
+FORMAT: Hidden Historical Truth.
+HOOK: "Do you know the real reason why [historical event] happened?"
+BODY: 3 shocking, lesser-known facts about a real historical figure or event.
+OUTRO: "What else don't they teach us?"
+SCRIPT RULES: Max 110 words. All facts must be real and verifiable. English only.`
   }
 ];
+
+// Give Historical format 2x probability by adding it again
+promptVault.push(promptVault[promptVault.length - 1]);
 
 // ============================================================
 // UNIVERSAL OUTPUT RULES (applied to every format)
@@ -92,13 +104,22 @@ Return ONLY a raw JSON object. No markdown. No code fences. No explanation text.
 {
   "title": "High-energy viral YouTube title with a strong curiosity gap",
   "script": "Full spoken voiceover. Follows the selected format structure. Max 110 words. Full stops only.",
-  "global_style_anchor": "A highly detailed, 15-word visual style description (e.g., 'hyper-realistic 3D render, dark cinematic lighting, highly detailed textures')",
+  "character_anchor": "A specific, highly detailed 1-sentence physical description of the primary subject that MUST appear in every visual (e.g., 'A single large brown eagle with a 2-meter wingspan', or 'Mahatma Gandhi in traditional white robes').",
+  "global_style_anchor": "A highly detailed, 15-word visual style description (e.g., 'hyper-realistic 3D render, dark cinematic lighting, highly detailed textures' OR 'authentic 1890s black and white historical photograph')",
   "global_seed": 123456,
+  "is_historical": false, 
+  "historical_subject": "Only filled if format is Hidden Historical Truth, e.g., 'Mahatma Gandhi'",
+  "search_queries": ["query1", "query2"], 
   "visuals": [
-    { "image_prompt": "Wide-angle establishing shot, subject fully visible from a distance, 35mm lens. Scene action description 1.", "motion_prompt": "Cinematic slow zoom in, fog rolling across the scene" },
-    { "image_prompt": "Wide-angle establishing shot, subject fully visible from a distance, 35mm lens. Scene action description 2.", "motion_prompt": "Camera pans left across the horizon" },
-    { "image_prompt": "Wide-angle establishing shot, subject fully visible from a distance, 35mm lens. Scene action description 3.", "motion_prompt": "Slow dolly forward, sunlight flickering through trees" },
-    { "image_prompt": "Wide-angle establishing shot, subject fully visible from a distance, 35mm lens. Scene action description 4.", "motion_prompt": "Birds-eye crane shot slowly descending" }
+    { 
+      "image_prompt": "Wide-angle establishing shot, subject fully visible from a distance, 35mm lens. Scene action description 1.", 
+      "motion_prompt": "Cinematic slow zoom in, fog rolling across the scene",
+      "search_query": "specific wikimedia commons search query for real photo if historical (otherwise omit)" 
+    },
+    { 
+      "image_prompt": "Wide-angle establishing shot, subject fully visible from a distance, 35mm lens. Scene action description 2.", 
+      "motion_prompt": "Camera pans left across the horizon" 
+    }
   ],
   "tags": ["tag1","tag2","tag3","tag4","tag5"]
 }`;
@@ -111,7 +132,11 @@ async function generateScript() {
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
 
   // Action B: Randomly select one format from the vault on each execution
-  const selectedFormat = promptVault[Math.floor(Math.random() * promptVault.length)];
+  let selectedFormat = promptVault[Math.floor(Math.random() * promptVault.length)];
+  
+  if (process.env.FORCE_HISTORICAL_MODE === 'true') {
+    selectedFormat = promptVault.find(f => f.formatName === 'Hidden Historical Truth');
+  }
 
   // Action D: Log the selected format
   log.info(`🎬 Selected Content Format: ${selectedFormat.formatName}`);
