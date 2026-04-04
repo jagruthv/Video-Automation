@@ -208,7 +208,11 @@ async function assembleVideo(audioPath, visualClips, wordTimestamps, options = {
 
   // STEP 2: Standardize all clips to identical 1080x1920 @ 30fps segments
   log.info('Step 2: Standardizing all clips to 1080x1920 @ 30fps...');
-  const durationPerClip = audioDuration / visualClips.length;
+  // To prevent the video track from ending before the audio track, we MUST mathematically 
+  // compensate for the frames lost during crossfading.
+  // Formula: targetTotalDuration = audioDuration + (N - 1) * XFADE_DURATION + 0.5s buffer
+  const totalRequiredVideoTime = audioDuration + ((visualClips.length - 1) * XFADE_DURATION) + 0.5;
+  const durationPerClip = totalRequiredVideoTime / visualClips.length;
   const segmentPaths = [];
 
   for (let i = 0; i < visualClips.length; i++) {
