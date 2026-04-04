@@ -68,12 +68,15 @@ async function main() {
   } catch (error) {
     log.error(`Pipeline encountered a fatal error: ${error.message}`);
   } finally {
-    tmpManager.cleanup();
+    tmpManager.destroy();
   }
 }
 
 if (require.main === module) {
-  main().then(() => process.exit(0)).catch(() => process.exit(1));
+  main().then(() => process.exit(0)).catch((err) => {
+    console.error('Unhandled error in top-level execution:', err);
+    process.exit(1);
+  });
 }
 
 module.exports = { main };
