@@ -65,7 +65,7 @@ async function generateImageHFInference(imagePrompt, globalAnchor, globalSeed, o
     }
   });
 
-  const res = await fetch('https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0', {
+  const res = await fetch('https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${hfToken}`,
@@ -207,7 +207,7 @@ async function animateWithHFToken(imagePath, motionPrompt, outputPath) {
     }
   });
 
-  const res = await fetch('https://api-inference.huggingface.co/models/Lightricks/LTX-Video', {
+  const res = await fetch('https://router.huggingface.co/hf-inference/models/Lightricks/LTX-Video', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${hfToken}`,
@@ -237,31 +237,29 @@ async function animateWithHFToken(imagePath, motionPrompt, outputPath) {
 // Free, no key needed. Hits public Lightricks/LTX-Video Space.
 // ============================================================
 async function animateWithGradioSpace(imagePath, motionPrompt, outputPath) {
-  log.info(`  [I2V] Gradio Space fallback → "${motionPrompt}"`);
+  log.info(`  [I2V] Gradio SVD fallback → "${motionPrompt}"`);
 
-  // Lazy-load Gradio client to avoid startup crash if not installed
   const { Client, handle_file } = require('@gradio/client');
-  const app = await Client.connect('Lightricks/LTX-Video', { hf_token: process.env.HF_TOKEN });
-
-  const result = await app.predict('/generate_video_from_image', {
-    image: handle_file(imagePath),
-    prompt: motionPrompt,
-    negative_prompt: 'blurry, low quality, watermark, worst quality',
-    num_frames: 49,
-    frame_rate: 24,
-    guidance_scale: 3.0,
-    seed: Math.floor(Math.random() * 999999),
-    num_inference_steps: 30,
+  // Uses Stable Video Diffusion (SVD XT) — correct /video endpoint confirmed working
+  const app = await Client.connect('multimodalart/stable-video-diffusion', {
+    hf_token: process.env.HF_TOKEN // using token speeds up queue, but not required
   });
 
-  // Gradio returns a blob URL — download the mp4 directly
+  const result = await app.predict('/video', {
+    image: handle_file(imagePath),
+    seed: Math.floor(Math.random() * 999999),
+    randomize_seed: false,
+    motion_bucket_id: 127,   // 1-255: higher = more motion
+    fps_id: 8,               // output FPS
+  });
+
   const videoUrl = result?.data?.[0]?.url || result?.data?.[0];
-  if (!videoUrl) throw new Error('Gradio returned no video URL');
-  
-  await downloadBinary(videoUrl, outputPath);
+  if (!videoUrl) throw new Error('SVD Gradio returned no video URL');
+
+  await downloadBinaryToFile(videoUrl, outputPath);
   const stat = fs.statSync(outputPath);
-  if (stat.size < 50000) throw new Error(`Gradio video too small: ${stat.size} bytes`);
-  log.info(`  [I2V] ✅ Gradio Space succeeded (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
+  if (stat.size < 50000) throw new Error(`SVD video too small: ${stat.size} bytes`);
+  log.info(`  [I2V] ✅ Gradio SVD succeeded (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
 }
 
 // ============================================================

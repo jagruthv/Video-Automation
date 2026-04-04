@@ -64,7 +64,7 @@ async function generateImage(outputPath) {
   if (hfToken) {
     try {
       console.log('  [IMG-1] Trying HF SDXL Inference API...');
-      const res = await fetch('https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0', {
+      const res = await fetch('https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${hfToken}`, 'Content-Type': 'application/json', 'X-Wait-For-Model': 'true' },
         body: JSON.stringify({ inputs: fullPrompt, parameters: { width: 768, height: 1344, seed: GLOBAL_SEED, num_inference_steps: 25 } }),
@@ -113,33 +113,53 @@ async function generateImage(outputPath) {
   console.log(`  ✅ Pollinations succeeded (${(sz3/1024).toFixed(0)}KB)`);
 }
 
+async function animateToVideo(imgPath, motionPrompt, videoPath) {
+  const hfToken = process.env.HF_TOKEN;
+  if (!hfToken) throw new Error('HF_TOKEN not set');
+
+  const imageBuffer = fs.readFileSync(imgPath);
+  const imageBase64 = imageBuffer.toString('base64');
+
+  console.log(`  Sending to LTX-Video via HF Inference API...`);
+  const res = await fetch('https://router.huggingface.co/hf-inference/models/Lightricks/LTX-Video', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${hfToken}`,
+      'Content-Type': 'application/json',
+      'X-Wait-For-Model': 'true',
+    },
+    body: JSON.stringify({
+      inputs: {
+        image: `data:image/jpeg;base64,${imageBase64}`,
+        prompt: motionPrompt,
+        negative_prompt: 'blurry, low quality, watermark',
+        num_frames: 49,
+        fps: 24,
+        guidance_scale: 3.0,
+      }
+    }),
+    signal: AbortSignal.timeout(300000),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`LTX-Video HF API ${res.status}: ${txt.substring(0, 300)}`);
+  }
+
+  const videoBuffer = Buffer.from(await res.arrayBuffer());
+  if (videoBuffer.length < 50000) throw new Error(`Video too small: ${videoBuffer.length} bytes`);
+  fs.writeFileSync(videoPath, videoBuffer);
+  console.log(`  ✅ LTX-Video succeeded! (${(videoBuffer.length / 1024 / 1024).toFixed(1)} MB)`);
+}
+
 async function run() {
   console.log('\n🎨 STEP 1: Generating base image (HF SDXL → FLUX Gradio → Pollinations)...');
   await generateImage(IMG_PATH);
   console.log('  ✅ Image saved!');
 
-  console.log('\n🎬 STEP 2: Animating image via Lightricks/LTX-Video (Gradio Space)...');
-  console.log('  This may take a few minutes on free tier...');
-
-  const { Client, handle_file } = require('@gradio/client');
-  const app = await Client.connect('Lightricks/LTX-Video');
-
-  const result = await app.predict('/generate_video_from_image', {
-    image: handle_file(IMG_PATH),
-    prompt: MOTION_PROMPT,
-    negative_prompt: 'blurry, low quality, watermark',
-    num_frames: 49,
-    frame_rate: 24,
-    guidance_scale: 3.0,
-    seed: GLOBAL_SEED,
-    num_inference_steps: 30,
-  });
-
-  const videoUrl = result?.data?.[0]?.url || result?.data?.[0];
-  if (!videoUrl) throw new Error(`No video URL in Gradio response: ${JSON.stringify(result?.data)}`);
-
-  console.log(`  Got video URL: ${videoUrl}`);
-  await downloadBinary(videoUrl, VIDEO_PATH);
+  console.log('\n🎬 STEP 2: Animating image via HF Inference (LTX-Video)...');
+  console.log('  This may take a few minutes...');
+  await animateToVideo(IMG_PATH, MOTION_PROMPT, VIDEO_PATH);
 
   const sizeMB = (fs.statSync(VIDEO_PATH).size / 1024 / 1024).toFixed(1);
   console.log(`\n✅ SUCCESS! Output saved to: ${VIDEO_PATH} (${sizeMB} MB)`);
