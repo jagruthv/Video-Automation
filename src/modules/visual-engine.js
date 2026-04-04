@@ -42,16 +42,144 @@ function downloadBinary(url, outputPath) {
 }
 
 // ============================================================
-// STEP 1 — IMAGE PHASE: Pollinations.ai
-// Generates a hyper-consistent base image using locked Anchor + Seed.
+// IMAGE SOURCE PRIORITY 1: Hugging Face Inference API (SDXL)
+// Uses HF_TOKEN. Model: stabilityai/stable-diffusion-xl-base-1.0
+// Fast, private, and high quality. ~5-10s per image.
+// ============================================================
+async function generateImageHFInference(imagePrompt, globalAnchor, globalSeed, outputPath) {
+  const hfToken = process.env.HF_TOKEN;
+  if (!hfToken) throw new Error('HF_TOKEN not set');
+
+  const fullPrompt = `${imagePrompt}, ${globalAnchor}`;
+  log.info(`  [IMG-1] HF SDXL Inference → "${fullPrompt.substring(0, 80)}..."`);
+
+  const body = JSON.stringify({
+    inputs: fullPrompt,
+    parameters: {
+      width: 768,
+      height: 1344,
+      seed: globalSeed,
+      num_inference_steps: 25,
+      guidance_scale: 7.5,
+      negative_prompt: 'blurry, distorted, low quality, text, watermark, ugly, deformed'
+    }
+  });
+
+  const res = await fetch('https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${hfToken}`,
+      'Content-Type': 'application/json',
+      'X-Wait-For-Model': 'true',
+    },
+    body,
+    signal: AbortSignal.timeout(90000),
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`HF SDXL ${res.status}: ${txt.substring(0, 150)}`);
+  }
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+  if (buffer.length < 10000) throw new Error(`HF SDXL image too small: ${buffer.length} bytes`);
+
+  const dir = path.dirname(outputPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(outputPath, buffer);
+  log.info(`  [IMG-1] ✅ HF SDXL succeeded (${(buffer.length / 1024).toFixed(0)}KB)`);
+}
+
+// ============================================================
+// IMAGE SOURCE PRIORITY 2: Hugging Face Gradio Space (FLUX)
+// 100% free, no key needed. Hits black-forest-labs/FLUX.1-schnell.
+// ============================================================
+async function generateImageGradioFlux(imagePrompt, globalAnchor, globalSeed, outputPath) {
+  log.info(`  [IMG-2] Gradio FLUX → "${imagePrompt.substring(0, 60)}..."`);
+
+  const { Client } = require('@gradio/client');
+  const fullPrompt = `${imagePrompt}, ${globalAnchor}, masterpiece, ultra-detailed, 9:16 vertical`;
+
+  const app = await Client.connect('black-forest-labs/FLUX.1-schnell', {
+    hf_token: process.env.HF_TOKEN // optional — speeds up queue if provided
+  });
+
+  const result = await app.predict('/infer', {
+    prompt: fullPrompt,
+    seed: globalSeed,
+    randomize_seed: false,
+    width: 768,
+    height: 1344,
+    num_inference_steps: 4,
+  });
+
+  const imageUrl = result?.data?.[0]?.url || result?.data?.[0];
+  if (!imageUrl) throw new Error(`FLUX Gradio returned no image URL`);
+
+  await downloadBinaryToFile(imageUrl, outputPath);
+  const size = fs.statSync(outputPath).size;
+  if (size < 10000) throw new Error(`FLUX image too small: ${size} bytes`);
+  log.info(`  [IMG-2] ✅ Gradio FLUX succeeded (${(size / 1024).toFixed(0)}KB)`);
+}
+
+// ============================================================
+// IMAGE SOURCE PRIORITY 3: Pollinations.ai (fallback)
+// Free, no key. Sometimes down.
+// ============================================================
+async function generateImagePollinations(imagePrompt, globalAnchor, globalSeed, outputPath) {
+  const fullPrompt = `${imagePrompt}, ${globalAnchor}`;
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=1080&height=1920&seed=${globalSeed}&nologo=true`;
+  log.info(`  [IMG-3] Pollinations fallback → "${imagePrompt.substring(0, 60)}..."`);
+  await downloadBinaryToFile(url, outputPath);
+  const size = fs.statSync(outputPath).size;
+  if (size < 10000) throw new Error(`Pollinations image too small (or 500 error): ${size} bytes`);
+  log.info(`  [IMG-3] ✅ Pollinations succeeded (${(size / 1024).toFixed(0)}KB)`);
+}
+
+// Helper: download binary via native https with redirect following
+function downloadBinaryToFile(url, outputPath) {
+  return new Promise((resolve, reject) => {
+    const dir = path.dirname(outputPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const file = fs.createWriteStream(outputPath);
+    https.get(url, { timeout: 90000 }, (res) => {
+      // Follow redirects
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        file.destroy();
+        fs.unlink(outputPath, () => {});
+        return downloadBinaryToFile(res.headers.location, outputPath).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`HTTP ${res.statusCode} from ${url.substring(0, 80)}`));
+      }
+      res.pipe(file);
+      file.on('finish', () => { file.close(); resolve(); });
+    }).on('error', reject).on('timeout', () => reject(new Error('Download timed out')));
+  });
+}
+
+// ============================================================
+// HYBRID IMAGE GENERATOR (Cascade)
 // ============================================================
 async function generateBaseImage(imagePrompt, globalAnchor, globalSeed, outputPath) {
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(imagePrompt + ', ' + globalAnchor)}?width=1080&height=1920&seed=${globalSeed}&nologo=true`;
-  log.info(`  [IMG] Pollinations → "${imagePrompt.substring(0, 60)}..."`);
-  await withRetry(() => downloadFile(url, outputPath), { maxRetries: 2, name: 'pollinations-img' });
-  if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size < 10000) {
-    throw new Error('Pollinations: Image too small or missing');
+  // Priority 1: HF Inference API (SDXL) — fast, uses HF_TOKEN
+  try {
+    await generateImageHFInference(imagePrompt, globalAnchor, globalSeed, outputPath);
+    return;
+  } catch (e) {
+    log.warn(`  [IMG] HF Inference failed: ${e.message} → trying FLUX Gradio...`);
   }
+
+  // Priority 2: Free Gradio FLUX Space — no key needed
+  try {
+    await generateImageGradioFlux(imagePrompt, globalAnchor, globalSeed, outputPath);
+    return;
+  } catch (e) {
+    log.warn(`  [IMG] Gradio FLUX failed: ${e.message} → trying Pollinations...`);
+  }
+
+  // Priority 3: Pollinations.ai
+  await generateImagePollinations(imagePrompt, globalAnchor, globalSeed, outputPath);
 }
 
 // ============================================================
