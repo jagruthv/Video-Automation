@@ -16,7 +16,6 @@ HOOK: Start with one bold, intriguing statement.
 BODY:
 - Number three: A genuinely surprising fact. 1-2 sentences.
 - Number two: Even more surprising. 1 sentence.
-- CTA INTERRUPT: "Hit subscribe if you learned something new!"
 - Number one: The most interesting fact of all.
 OUTRO: One short question to drive comments.
 SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. Write numbers as words. English only.`
@@ -27,7 +26,6 @@ SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. Writ
 FORMAT: Everyday Object Secret.
 HOOK: "Have you ever wondered what [feature] on [common object] is actually for?"
 BODY: Reveal the real, engineering-driven reason for the feature. Add 2 more related object secrets.
-- CTA INTERRUPT: "Subscribe for more everyday secrets!"
 - FINAL REVEAL: The most unexpected object secret.
 OUTRO: "What did you think it was for?"
 SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
@@ -38,7 +36,6 @@ SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. Engl
 FORMAT: Simulation / Glitch Theory.
 HOOK: "Three strange phenomena in your body that feel like glitches."
 BODY: Present 3 real, documented phenomena of the human body (like the Troxler effect) that feel surreal.
-- CTA INTERRUPT: "Hit subscribe if you've experienced this!"
 - NUMBER ONE GLITCH: The most existentially bizarre one.
 OUTRO: "Which glitch do you have?"
 SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
@@ -49,7 +46,6 @@ SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. Engl
 FORMAT: The Curious Warning.
 HOOK: "Why you should be careful when you [perform normal action / visit normal place]."
 BODY: Reveal 3 genuinely fascinating, mildly unsettling scientific facts about this normal thing.
-- CTA INTERRUPT: "Hit subscribe to stay informed."
 - NUMBER ONE: The most fascinating scientific fact.
 OUTRO: "Did you know this?"
 SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
@@ -60,7 +56,6 @@ SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. Engl
 FORMAT: The Mythbuster.
 HOOK: "Most people are completely wrong about [common belief]."
 BODY: Debunk the myth. Present 3 layers of truth, each more surprising than the last.
-- CTA INTERRUPT: "Subscribe for more truths!"
 - NUMBER ONE TRUTH: The real scientific answer.
 OUTRO: "What myth should we bust next?"
 SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
@@ -71,7 +66,6 @@ SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. Engl
 FORMAT: The Hidden History.
 HOOK: "The bizarre true story behind [historical event or object]."
 BODY: Tell the story in 3 fast-paced acts. Each act reveals a surprising new detail.
-- CTA INTERRUPT: "Subscribe. The ending is even crazier."
 - THE CLIMAX: The most unexpected final detail.
 OUTRO: "Have you heard this story before?"
 SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
@@ -90,6 +84,10 @@ VISUAL PROMPT RULES (MANDATORY FOR ALL FORMATS):
 - DO NOT include specific named people, recognizable celebrities, or identifiable public figures.
 - Use diverse shot styles: macro lens, POV, silhouette, aerial, 3D abstract render, extreme close-up.
 - CRITICAL FORMAT RULE: Every single visual prompt MUST end with the exact phrase: "4k, hyper-realistic, slow pan right"
+
+SCRIPT RULES (MANDATORY):
+- DO NOT include any spoken calls to action (like "subscribe", "like", or "comment"). The system handles this via a visual overlay.
+- End the script smoothly with just the outro question.
 
 OUTPUT FORMAT (CRITICAL):
 Return ONLY a raw JSON object. No markdown. No code fences. No explanation text. Only JSON.

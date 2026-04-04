@@ -60,6 +60,9 @@ WrapStyle: 1
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Main,Arial Black,76,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,2,0,1,5,2,5,40,40,960,1
+Style: SubRed,Arial Black,70,&H00FFFFFF,&H000000FF,&H001111E6,&H001111E6,-1,0,0,0,100,100,0,0,3,25,0,2,40,40,400,1
+Style: SubWhite,Arial Black,70,&H00444444,&H000000FF,&H00EEEEEE,&H00EEEEEE,-1,0,0,0,100,100,0,0,3,25,0,2,40,40,400,1
+Style: Pointer,Arial,70,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,3,0,7,40,40,400,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -102,10 +105,35 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     }
   }
 
+  // ============================================================
+  // DYNAMIC SUBSCRIBE OVERLAY (Visual Only, No Green Screen Needed)
+  // Appears 5 seconds before the end of the voiceover.
+  // ============================================================
+  if (filteredWords.length > 0) {
+    const finalWordEndMs = filteredWords[filteredWords.length - 1].endMs;
+    const btnStartMs = Math.max(0, finalWordEndMs - 5000);
+    const clickMs = btnStartMs + 1000;
+    const btnEndMs = btnStartMs + 4000;
+
+    const tStart = formatASSTime(btnStartMs);
+    const tClick = formatASSTime(clickMs);
+    const tEnd = formatASSTime(btnEndMs);
+
+    // 1. Red SUBSCRIBE Button (pops up)
+    events.push(`Dialogue: 0,${tStart},${tClick},SubRed,,0,0,0,,{\\fscx100\\fscy100}SUBSCRIBE`);
+    
+    // 2. White SUBSCRIBED Button (after click)
+    events.push(`Dialogue: 0,${tClick},${tEnd},SubWhite,,0,0,0,,{\\fscx100\\fscy100}SUBSCRIBED`);
+    
+    // 3. Animated Cursor Pointer (Draws a pointer, moves to button, clicks, stays)
+    // Pointer vector drawing: m 0 0 l 0 60 l 15 45 l 30 75 l 37 67 l 22 37 l 45 30
+    events.push(`Dialogue: 0,${formatASSTime(btnStartMs + 300)},${tEnd},Pointer,,0,0,0,,{\\move(800,1920,540,1520,0,700)\\t(700,800,\\fscx80\\fscy80)\\t(800,900,\\fscx100\\fscy100)\\p1}m 0 0 l 0 60 l 15 45 l 30 75 l 37 67 l 22 37 l 45 30{\\p0}`);
+  }
+
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(outputPath, header + events.join('\n') + '\n');
-  log.info(`ASS subtitles: ${events.length} events generated (Smart Chunking, 3 words/screen)`);
+  log.info(`ASS subtitles: ${events.length} events generated (Smart Chunking + Dynamic Subscribe Overlay)`);
 }
 
 function formatASSTime(ms) {
