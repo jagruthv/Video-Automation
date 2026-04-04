@@ -18,7 +18,7 @@ BODY:
 - Number two: Even more surprising. 1 sentence.
 - Number one: The most interesting fact of all.
 OUTRO: One short question to drive comments.
-SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. Write numbers as words. English only.`
+SCRIPT RULES: Max 130 words total. Fast pacing. Full stops only. No commas. Write numbers as words. English only.`
   },
   {
     formatName: 'Everyday Object Secret',
@@ -28,7 +28,7 @@ HOOK: "Have you ever wondered what [feature] on [common object] is actually for?
 BODY: Reveal the real, engineering-driven reason for the feature. Add 2 more related object secrets.
 - FINAL REVEAL: The most unexpected object secret.
 OUTRO: "What did you think it was for?"
-SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
+SCRIPT RULES: Max 130 words total. Fast pacing. Full stops only. No commas. English only.`
   },
   {
     formatName: 'Simulation Glitch',
@@ -38,7 +38,7 @@ HOOK: "Three strange phenomena in your body that feel like glitches."
 BODY: Present 3 real, documented phenomena of the human body (like the Troxler effect) that feel surreal.
 - NUMBER ONE GLITCH: The most existentially bizarre one.
 OUTRO: "Which glitch do you have?"
-SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
+SCRIPT RULES: Max 130 words total. Fast pacing. Full stops only. No commas. English only.`
   },
   {
     formatName: 'The Curious Warning',
@@ -48,7 +48,7 @@ HOOK: "Why you should be careful when you [perform normal action / visit normal 
 BODY: Reveal 3 genuinely fascinating, mildly unsettling scientific facts about this normal thing.
 - NUMBER ONE: The most fascinating scientific fact.
 OUTRO: "Did you know this?"
-SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
+SCRIPT RULES: Max 130 words total. Fast pacing. Full stops only. No commas. English only.`
   },
   {
     formatName: 'The Mythbuster',
@@ -58,7 +58,7 @@ HOOK: "Most people are completely wrong about [common belief]."
 BODY: Debunk the myth. Present 3 layers of truth, each more surprising than the last.
 - NUMBER ONE TRUTH: The real scientific answer.
 OUTRO: "What myth should we bust next?"
-SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
+SCRIPT RULES: Max 130 words total. Fast pacing. Full stops only. No commas. English only.`
   },
   {
     formatName: 'The Hidden History',
@@ -68,7 +68,7 @@ HOOK: "The bizarre true story behind [historical event or object]."
 BODY: Tell the story in 3 fast-paced acts. Each act reveals a surprising new detail.
 - THE CLIMAX: The most unexpected final detail.
 OUTRO: "Have you heard this story before?"
-SCRIPT RULES: Max 110 words total. Fast pacing. Full stops only. No commas. English only.`
+SCRIPT RULES: Max 130 words total. Fast pacing. Full stops only. No commas. English only.`
   },
   {
     formatName: 'Hidden Historical Truth',
@@ -77,7 +77,7 @@ FORMAT: Hidden Historical Truth.
 HOOK: "Do you know the real reason why [historical event] happened?"
 BODY: 3 shocking, lesser-known facts about a real historical figure or event.
 OUTRO: "What else don't they teach us?"
-SCRIPT RULES: Max 110 words. All facts must be real and verifiable. English only.`
+SCRIPT RULES: Max 130 words. All facts must be real and verifiable. English only.`
   }
 ];
 
@@ -89,10 +89,10 @@ promptVault.push(promptVault[promptVault.length - 1]);
 // ============================================================
 const UNIVERSAL_RULES = `
 VISUAL PROMPT RULES (MANDATORY FOR ALL FORMATS):
-- Generate exactly 8 to 10 visual scene objects — one for every few seconds of the script.
+- Generate exactly 10 to 12 visual scene objects — one for every few seconds of the script.
 - Each scene MUST have an 'image_prompt' and a 'motion_prompt'.
-- image_prompt: CRITICAL: Must start with 'Wide-angle establishing shot, subject fully visible from a distance, 35mm lens'. Focus on physical action only. Forbidden from textures, faces, close-ups.
-- motion_prompt: A cinematic camera motion directive (e.g. 'Cinematic slow zoom in, fog rolling across the scene', 'Camera pans left, slow dolly forward', 'Handheld shake, subject approached from behind').
+- image_prompt: CRITICAL: Must start with 'Wide-angle establishing shot, subject fully visible from a distance, 35mm lens'. Focus on EXTREMELY dynamic physical action (e.g., 'inhaling deeply with chest expanding', 'sprinting forward', 'exploding into particles'). Avoid static boring shots. Forbidden from textures, faces, close-ups.
+- motion_prompt: A cinematic camera motion directive (e.g. 'Cinematic slow zoom in with fast erratic shaking', 'Camera pans left incredibly fast, intense motion blur', 'Handheld breathing effect, subject approached from behind').
 - DO NOT include specific named people, recognizable celebrities, or identifiable public figures.
 
 SCRIPT RULES (MANDATORY):
@@ -103,8 +103,8 @@ OUTPUT FORMAT (CRITICAL):
 Return ONLY a raw JSON object. No markdown. No code fences. No explanation text. Only JSON.
 {
   "title": "High-energy viral YouTube title with a strong curiosity gap",
-  "script": "Full spoken voiceover. Follows the selected format structure. Max 110 words. Full stops only.",
-  "character_anchor": "A specific, highly detailed 1-sentence physical description of the primary subject that MUST appear in every visual (e.g., 'A single large brown eagle with a 2-meter wingspan', or 'Mahatma Gandhi in traditional white robes').",
+  "script": "Full spoken voiceover. Follows the selected format structure. Max 130 words. Full stops only.",
+  "character_anchor": "OPTIONAL. A detailed physical description of a primary subject IF the topic requires one. CRITICAL: If the video is abstract, scientific, or better without a single locked subject, output an empty string '' so scenes can be completely unique. You decide based on audience retention.",
   "global_style_anchor": "A highly detailed, 15-word visual style description (e.g., 'hyper-realistic 3D render, dark cinematic lighting, highly detailed textures' OR 'authentic 1890s black and white historical photograph')",
   "global_seed": 123456,
   "is_historical": false, 

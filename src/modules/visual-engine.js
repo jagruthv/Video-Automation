@@ -464,7 +464,7 @@ async function acquireVisuals(scriptJson, targetDurationMs, outputDir = VISUALS_
 
   const visualsArray = Array.isArray(scriptJson.visuals) ? scriptJson.visuals : [];
   const globalAnchor = scriptJson.global_style_anchor || 'hyper-realistic cinematic lighting, highly detailed';
-  const characterAnchor = scriptJson.character_anchor || 'The main subject';
+  const characterAnchor = scriptJson.character_anchor || '';
   const globalSeed   = scriptJson.global_seed || Math.floor(Math.random() * 999999);
   const isHistorical = scriptJson.is_historical === true;
 
@@ -516,12 +516,14 @@ async function acquireVisuals(scriptJson, targetDurationMs, outputDir = VISUALS_
           // Scene 1+: Create videos generated FROM that specific real image
           log.info(`  [SCENE] Generating I2V video from the core historical image...`);
           fs.copyFileSync(baseHistoricalImagePath, imgPath);
-          finalProvider = await animateImage(imgPath, `[${characterAnchor}] ${motionPrompt}`, videoPath, true);
+          const charPrefix = characterAnchor ? `[${characterAnchor}] ` : '';
+          finalProvider = await animateImage(imgPath, `${charPrefix}${motionPrompt}`, videoPath, true);
         }
       } else {
-        // Normal Flow: Constant generation
-        const unifiedImagePrompt = `[${characterAnchor}] ${imagePrompt}`;
-        const unifiedMotionPrompt = `[${characterAnchor}] ${motionPrompt}`;
+        // Normal Flow: Constant generation (if anchor exists) or diverse generation
+        const charPrefix = characterAnchor ? `[${characterAnchor}] ` : '';
+        const unifiedImagePrompt = `${charPrefix}${imagePrompt}`;
+        const unifiedMotionPrompt = `${charPrefix}${motionPrompt}`;
         const veoPrompt = `${unifiedImagePrompt}. ${unifiedMotionPrompt}. Style: ${globalAnchor}`;
         
         // STEP 1: Generate base AI image (locked seed = visual continuity, fallback for I2V)

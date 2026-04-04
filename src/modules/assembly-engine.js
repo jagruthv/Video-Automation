@@ -71,19 +71,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
   const events = [];
   const filteredWords = wordTimestamps.filter(w => w.word && w.word.trim().length > 0);
 
-  // Iterate word-by-word for high-retention snap editing
-  for (let i = 0; i < filteredWords.length; i++) {
-    const wordStart = filteredWords[i].startMs;
-    const wordEnd = filteredWords[i].endMs;
-    // Remove stray characters for absolute cleanness
-    const cleanWord = filteredWords[i].word;
+  // Iterate word-by-word but group them into chunks of 3 words per screen
+  const chunkSize = 3;
+  for (let i = 0; i < filteredWords.length; i += chunkSize) {
+    const chunk = filteredWords.slice(i, i + chunkSize);
+    const chunkStart = chunk[0].startMs;
+    const chunkEnd = chunk[chunk.length - 1].endMs;
+    
+    // Join words into a single clean phrase
+    const cleanPhrase = chunk.map(w => w.word).join(' ');
 
     // \fad(fade_in, fade_out) -> fade in 80ms
     // \move(x1, y1, x2, y2, t1, t2) -> drop from Y=910 down to Y=960 (approx 0.5cm drop)
     const animConfig = `{\\fad(80,0)\\move(540,910,540,960,0,120)}`;
     
     events.push(
-      `Dialogue: 0,${formatASSTime(wordStart)},${formatASSTime(wordEnd)},Main,,0,0,0,,${animConfig}${cleanWord}`
+      `Dialogue: 0,${formatASSTime(chunkStart)},${formatASSTime(chunkEnd)},Main,,0,0,0,,${animConfig}${cleanPhrase}`
     );
   }
 
