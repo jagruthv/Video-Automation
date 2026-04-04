@@ -17,7 +17,7 @@ const microsoftEdgeTTS = {
   name: 'microsoft-edge-tts',
 
   get VOICE() {
-    return process.env.EDGE_VOICE_ID || 'en-US-ChristopherNeural';
+    return process.env.EDGE_VOICE_ID || 'en-US-SteffanNeural';
   },
 
   async synthesize(scriptText, outputPath) {
@@ -27,13 +27,13 @@ const microsoftEdgeTTS = {
 
     if (!cleanText) throw new Error('Edge TTS: Script text is empty after cleaning');
 
-    log.info(`🎙️ Generating audio with heavy-bass Edge TTS voice: ${voiceName}...`);
+    log.info(`🎙️ Generating audio with highly energetic TTS voice: ${voiceName}...`);
 
     const communicate = new Communicate(cleanText, {
       voice: voiceName,
-      rate: '+10%',   // Sped up further to match high-retention short-form pacing (+10% total)
-      volume: '+100%', // Increased base volume
-      pitch: '-5Hz'   // Lower pitch for deep bass resonance
+      rate: '+15%',   // Very fast storytelling pace
+      volume: '+100%', // Increased base volume for aggressive mix
+      pitch: '+2Hz'   // Slightly pitched up for intense conversational energy
     });
 
     const dir = path.dirname(outputPath);

@@ -96,8 +96,10 @@ VISUAL PROMPT RULES (MANDATORY FOR ALL FORMATS):
 - DO NOT include specific named people, recognizable celebrities, or identifiable public figures.
 
 SCRIPT RULES (MANDATORY):
+- TONE: High-energy, intense, conversational, and highly emotive. Use "brain-rot" pacing or "MrBeast" style extreme hooks (e.g., "99% of people don't know..." or "THIS is why [X] is secretly terrifying..."). 
+- Avoid formal/dry academic tones ("Do you know the real reason...").
 - DO NOT include any spoken calls to action (like "subscribe", "like", or "comment"). The system handles this via a visual overlay.
-- End the script smoothly with just the outro question.
+- End the script abruptly with a powerful outro question to drive massive engagement.
 
 OUTPUT FORMAT (CRITICAL):
 Return ONLY a raw JSON object. No markdown. No code fences. No explanation text. Only JSON.
