@@ -261,23 +261,14 @@ async function fetchPixabayImage(query, outputPath) {
 
 // ============================================================
 // IMAGE / VIDEO ACQUISITION CASCADE
-// New Priority: 1. Pollinations, 2. Veo, 3. Pexels, 4. Pixabay
+// New Priority: 1. Veo 3.1, 2. Pexels Video, 3. Pexels Image, 4. Pollinations, 5. Pixabay
 // ============================================================
 async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
   const keywords = extractKeywords(query);
 
-  // 1: Pollinations AI (Image)
+  // 1: Google Veo 3.1 (Video)
   try {
-    log.info(`Scene ${sceneIndex}: Pollinations AI (Priority 1) → "${query.substring(0, 60)}..."`);
-    const provider = await withRetry(() => fetchPollinationsImage(query, imageFallbackPath), { maxRetries: 2, name: `pollinations-${sceneIndex}` });
-    return { path: imageFallbackPath, type: 'image', provider, attribution: 'Image by Pollinations.ai' };
-  } catch (err) {
-    log.warn(`Scene ${sceneIndex}: Pollinations failed (${err.message}). Falling back to Google Veo 3.1...`);
-  }
-
-  // 2: Google Veo 3.1 (Video)
-  try {
-    log.info(`Scene ${sceneIndex}: Google Veo 3.1 → "${query}"`);
+    log.info(`Scene ${sceneIndex}: Google Veo 3.1 (Priority 1) → "${query}"`);
     const provider = await withRetry(async () => {
       try {
         return await fetchVeoVideo(query, videoPath);
@@ -294,7 +285,7 @@ async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
     log.warn(`Scene ${sceneIndex}: Veo failed (${err.message}). Falling back to Pexels Video...`);
   }
 
-  // 3: Pexels Video
+  // 2: Pexels Video
   try {
     log.info(`Scene ${sceneIndex}: Pexels Video → "${query}"`);
     const provider = await withRetry(() => fetchPexelsVideo(query, videoPath), { maxRetries: 2, name: `pexels-video-${sceneIndex}` });
@@ -303,13 +294,22 @@ async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
     log.warn(`Scene ${sceneIndex}: Pexels Video failed. Falling back to Pexels Image...`);
   }
 
-  // 4: Pexels Image
+  // 3: Pexels Image
   try {
     log.info(`Scene ${sceneIndex}: Pexels Image → "${keywords}"`);
     const provider = await fetchPexelsImage(keywords, imageFallbackPath);
     return { path: imageFallbackPath, type: 'image', provider, attribution: 'Photo by Pexels' };
   } catch {
-    log.warn(`Scene ${sceneIndex}: Pexels Image failed. Trying Pixabay...`);
+    log.warn(`Scene ${sceneIndex}: Pexels Image failed. Falling back to Pollinations AI...`);
+  }
+
+  // 4: Pollinations AI (Image)
+  try {
+    log.info(`Scene ${sceneIndex}: Pollinations AI → "${query.substring(0, 60)}..."`);
+    const provider = await withRetry(() => fetchPollinationsImage(query, imageFallbackPath), { maxRetries: 2, name: `pollinations-${sceneIndex}` });
+    return { path: imageFallbackPath, type: 'image', provider, attribution: 'Image by Pollinations.ai' };
+  } catch (err) {
+    log.warn(`Scene ${sceneIndex}: Pollinations failed (${err.message}). Trying Pixabay...`);
   }
 
   // 5: Pixabay Image
