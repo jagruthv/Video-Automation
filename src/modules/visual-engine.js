@@ -260,37 +260,22 @@ async function fetchPixabayImage(query, outputPath) {
 }
 
 // ============================================================
-// IMAGE ACQUISITION CASCADE
-// ============================================================
-async function acquireImage(prompt, outputPath, sceneIndex) {
-  const keywords = extractKeywords(prompt);
-
-  try {
-    log.info(`Scene ${sceneIndex}: Pollinations AI → "${prompt.substring(0, 60)}..."`);
-    const provider = await withRetry(() => fetchPollinationsImage(prompt, outputPath), { maxRetries: 2, name: `pollinations-${sceneIndex}` });
-    return { provider, attribution: 'Image by Pollinations.ai' };
-  } catch { log.warn(`Scene ${sceneIndex}: Pollinations failed. Trying Pexels Image...`); }
-
-  try {
-    const provider = await fetchPexelsImage(keywords, outputPath);
-    return { provider, attribution: 'Photo by Pexels' };
-  } catch { log.warn(`Scene ${sceneIndex}: Pexels Image failed. Trying Pixabay...`); }
-
-  try {
-    const provider = await fetchPixabayImage(keywords, outputPath);
-    return { provider, attribution: 'Image by Pixabay' };
-  } catch {
-    log.error(`Scene ${sceneIndex}: All image providers failed. Deploying Unsplash placeholder.`);
-    const fallbackUrl = 'https://source.unsplash.com/1080x1920/?technology,abstract';
-    await downloadFile(fallbackUrl, outputPath);
-    return { provider: 'Unsplash Static Placeholder', attribution: 'Image by Unsplash' };
-  }
-}
-
-// ============================================================
-// VIDEO ACQUISITION CASCADE
+// IMAGE / VIDEO ACQUISITION CASCADE
+// New Priority: 1. Pollinations, 2. Veo, 3. Pexels, 4. Pixabay
 // ============================================================
 async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
+  const keywords = extractKeywords(query);
+
+  // 1: Pollinations AI (Image)
+  try {
+    log.info(`Scene ${sceneIndex}: Pollinations AI (Priority 1) → "${query.substring(0, 60)}..."`);
+    const provider = await withRetry(() => fetchPollinationsImage(query, imageFallbackPath), { maxRetries: 2, name: `pollinations-${sceneIndex}` });
+    return { path: imageFallbackPath, type: 'image', provider, attribution: 'Image by Pollinations.ai' };
+  } catch (err) {
+    log.warn(`Scene ${sceneIndex}: Pollinations failed (${err.message}). Falling back to Google Veo 3.1...`);
+  }
+
+  // 2: Google Veo 3.1 (Video)
   try {
     log.info(`Scene ${sceneIndex}: Google Veo 3.1 → "${query}"`);
     const provider = await withRetry(async () => {
@@ -309,16 +294,35 @@ async function acquireVideo(query, videoPath, imageFallbackPath, sceneIndex) {
     log.warn(`Scene ${sceneIndex}: Veo failed (${err.message}). Falling back to Pexels Video...`);
   }
 
+  // 3: Pexels Video
   try {
     log.info(`Scene ${sceneIndex}: Pexels Video → "${query}"`);
     const provider = await withRetry(() => fetchPexelsVideo(query, videoPath), { maxRetries: 2, name: `pexels-video-${sceneIndex}` });
     return { path: videoPath, type: 'video', provider, attribution: 'Video by Pexels' };
   } catch (err) {
-    log.warn(`Scene ${sceneIndex}: Pexels Video failed. Falling back to image cascade...`);
+    log.warn(`Scene ${sceneIndex}: Pexels Video failed. Falling back to Pexels Image...`);
   }
 
-  const { provider, attribution } = await acquireImage(query, imageFallbackPath, sceneIndex);
-  return { path: imageFallbackPath, type: 'image', provider, attribution };
+  // 4: Pexels Image
+  try {
+    log.info(`Scene ${sceneIndex}: Pexels Image → "${keywords}"`);
+    const provider = await fetchPexelsImage(keywords, imageFallbackPath);
+    return { path: imageFallbackPath, type: 'image', provider, attribution: 'Photo by Pexels' };
+  } catch {
+    log.warn(`Scene ${sceneIndex}: Pexels Image failed. Trying Pixabay...`);
+  }
+
+  // 5: Pixabay Image
+  try {
+    log.info(`Scene ${sceneIndex}: Pixabay Image → "${keywords}"`);
+    const provider = await fetchPixabayImage(keywords, imageFallbackPath);
+    return { path: imageFallbackPath, type: 'image', provider, attribution: 'Image by Pixabay' };
+  } catch {
+    log.error(`Scene ${sceneIndex}: All providers failed. Deploying Unsplash placeholder.`);
+    const fallbackUrl = 'https://source.unsplash.com/1080x1920/?technology,abstract';
+    await downloadFile(fallbackUrl, imageFallbackPath);
+    return { path: imageFallbackPath, type: 'image', provider: 'Unsplash Static Placeholder', attribution: 'Image by Unsplash' };
+  }
 }
 
 // ============================================================
