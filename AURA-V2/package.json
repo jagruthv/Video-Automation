@@ -1,0 +1,40 @@
+{
+  "name": "aura-v2",
+  "version": "2.0.0",
+  "description": "Autonomous AI YouTube video production pipeline",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "yt-auth": "node scripts/yt-auth.js",
+    "probe": "node scripts/probe-gpu-endpoint.js"
+  },
+  "keywords": [
+    "youtube",
+    "automation",
+    "ai",
+    "video"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "@google/genai": "^1.48.0",
+    "@google/generative-ai": "^0.24.1",
+    "@gradio/client": "^2.1.0",
+    "@rohitaryal/whisk-api": "^4.0.1",
+    "better-sqlite3": "^12.8.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.0",
+    "edge-tts-universal": "^1.4.0",
+    "express": "^5.2.1",
+    "ffmpeg-static": "^5.3.0",
+    "googleapis": "^171.4.0",
+    "puppeteer": "^24.40.0",
+    "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}

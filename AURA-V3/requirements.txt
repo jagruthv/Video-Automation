@@ -1,0 +1,17 @@
+# AURA-V3 — pip requirements
+# Install: pip install -r requirements.txt
+
+# Core
+pydantic>=2.0
+python-dotenv
+
+# Image / Video generation
+Pillow>=10.0
+opencv-python-headless
+
+# Manim (animation engine)
+# Requires additional system deps — see https://docs.manim.community/en/stable/installation.html
+manim>=0.18
+
+# HTTP
+requests

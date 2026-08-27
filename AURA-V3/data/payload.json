@@ -1,0 +1,85 @@
+[
+  {
+    "ID": 1,
+    "Source_Video": "when did the family who called you a monster come crawling back for help",
+    "Source_URL": "https://youtube.com/shorts/G_7z6Am5MO0?si=HClorNobnk6N4hoT",
+    "Total_Duration": "02:36",
+    "Remixed_Audio_Script": "When exactly did the family who labeled you a monster come begging for your help? I was 22 when my autistic brother attacked me at a family gathering. We were grilling outside when Jake grew agitated by the smoke and noise. I noticed the warning signs—flapping hands, rocking—signaling a meltdown. I tried moving him inside, but he grabbed a metal spatula and repeatedly bashed my arms and shoulders. I raised my hands to block, and as he swung at my face, I pushed him away once. He stumbled, hitting his head on the patio. He needed seven stitches. My mom screamed at me relentlessly, ignoring my defense. Extended family looked at me like a villain. Initially, my parents apologized and we tried therapy. But months later, they rewrote history. They claimed I attacked him unprovoked and uninvited me from my sister's wedding. I cut them off, built a successful career, and found a supportive wife. Five years later, they call sobbing. Jake violently attacked a coworker, and they needed my legal connections. Mom claimed 'family stands together.' I laughed and refused. Jake got six months locked up and my parents went broke from legal fees. I enjoyed my wedding without them.",
+    "Editing_Blueprint": [
+      {
+        "Scene": 1,
+        "Timestamp": "00:00 - 01:29",
+        "Visual_Action": "Satisfying kinetic sand and cutting visuals playing in the background behind a massive block of text.",
+        "Hazards_Found": "Heavy Subtitles (Hardcoded dead-center, taking up 50% of the screen).",
+        "Visual_Decision": "DISCARD",
+        "FFmpeg_Instructions": "Visual ruined by giant text. Replace with clean background footage (e.g., CC0 kinetic sand or ASMR cutting)."
+      },
+      {
+        "Scene": 2,
+        "Timestamp": "01:29 - 02:36",
+        "Visual_Action": "Continued satisfying background footage with story text overlay.",
+        "Hazards_Found": "Heavy Subtitles.",
+        "Visual_Decision": "DISCARD",
+        "FFmpeg_Instructions": "Visual ruined by giant text. Replace with clean background footage (e.g., CC0 Minecraft Parkour or power washing)."
+      }
+    ]
+  },
+  {
+    "ID": 2,
+    "Source_Video": "AT 8, MY PARENTS LEFT ME AT A BUS STATION. A STRANGER STAYED-AND ONLY AFTER HE DIED DID I LEARN HE.",
+    "Source_URL": "https://youtube.com/shorts/CZCxK_tcx3s?si=uIyP3I_Z3QK9slOY",
+    "Total_Duration": "02:31",
+    "Remixed_Audio_Script": "At eight years old, my mom and dad abandoned me at a bus terminal. A random guy stayed behind, and it wasn't until his passing that I discovered he left me $3.8 million. My parents tried suing me in court, and smirked about it. I represented myself. It started when my mom told me to watch her bag while she used the restroom. She never returned; my dad was already waiting in the running car, and they drove off. I waited for hours until a boiler repairman named Arthur sat next to me. Instead of calling the cops, he bought me food, took me in, and became my guardian. Ten years later, Arthur died. Turns out, he was a massive silent investor and left me millions. The biological parents somehow found out and filed a lawsuit claiming Arthur kidnapped me to steal their money. In court, they looked so smug. I approached the judge and pulled out the exact same floral purse my mom left me with. Inside was a hidden note she wrote my dad: 'The kid is too offensive... we start over in Vegas.' The case was instantly dismissed. For revenge, I bought the debt on their house, foreclosed on it, and turned it into a youth shelter named after Arthur.",
+    "Editing_Blueprint": [
+      {
+        "Scene": 1,
+        "Timestamp": "00:00 - 01:05",
+        "Visual_Action": "Satisfying background footage of mechanical parts and cleaning.",
+        "Hazards_Found": "Heavy Subtitles (Large white text with black outlines hardcoded in the center).",
+        "Visual_Decision": "DISCARD",
+        "FFmpeg_Instructions": "Visual ruined by giant text. Replace with clean background footage."
+      },
+      {
+        "Scene": 2,
+        "Timestamp": "01:05 - 02:31",
+        "Visual_Action": "Continued satisfying background loops.",
+        "Hazards_Found": "Heavy Subtitles.",
+        "Visual_Decision": "DISCARD",
+        "FFmpeg_Instructions": "Visual ruined by giant text. Replace with clean background footage."
+      }
+    ]
+  },
+  {
+    "ID": 3,
+    "Source_Video": "#funny #fyp #foryou #podcast #storytime #reddit #satisfying",
+    "Source_URL": "https://youtube.com/shorts/5IHv0TBXTeg?si=F59LgRV7OAMgnLH-",
+    "Total_Duration": "02:38",
+    "Remixed_Audio_Script": "My sibling asked me to attend her baby shower, just so she could announce to everyone that my deceased husband was the father of her child, and then demanded 50% of my inheritance. So I handed her documents that drained the color from her face. My husband Ryan passed away from cancer at 36, leaving me around $2.3 million. My sister Brooke was never close to me, always asking for money, and even flirted at his funeral. Three months ago, she got pregnant and refused to name the father. She threw a massive baby shower she couldn't afford. During the party, she tapped her glass and announced to 50 guests that Ryan was the father, claiming they had a secret romance. She demanded half his estate for 'his baby.' My mom immediately supported her, while the room judged me. I calmly reached into my bag. I pulled out Ryan's medical records showing he had a successful, zero-sperm vasectomy three years ago. Next, a notarized letter from his doctor stating his cancer rendered him completely sterile. Finally, his phone records proving he hadn't sent her a single text in three years. Her fake legacy was completely destroyed in front of everyone.",
+    "Editing_Blueprint": [
+      {
+        "Scene": 1,
+        "Timestamp": "00:00 - 00:45",
+        "Visual_Action": "Power washing a brick patio, then restringing a leather baseball glove, then building a traditional drum, scooping boba.",
+        "Hazards_Found": "Heavy Subtitles (Hardcoded text over the action).",
+        "Visual_Decision": "DISCARD",
+        "FFmpeg_Instructions": "Visual ruined by giant text. Replace with clean background footage."
+      },
+      {
+        "Scene": 2,
+        "Timestamp": "00:45 - 01:46",
+        "Visual_Action": "Deep-frying a flower garland, tinting a car door window, running red candy through a press, vacuuming a couch.",
+        "Hazards_Found": "Heavy Subtitles.",
+        "Visual_Decision": "DISCARD",
+        "FFmpeg_Instructions": "Visual ruined by giant text. Replace with clean background footage."
+      },
+      {
+        "Scene": 3,
+        "Timestamp": "01:46 - 02:38",
+        "Visual_Action": "Strapping on stiletto heels, vacuuming mud, painting a blue square, chopping firewood, using a contour gauge.",
+        "Hazards_Found": "Heavy Subtitles.",
+        "Visual_Decision": "DISCARD",
+        "FFmpeg_Instructions": "Visual ruined by giant text. Replace with clean background footage."
+      }
+    ]
+  }
+]

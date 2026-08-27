@@ -1,0 +1,254 @@
+{
+  "_meta": {
+    "source": "Polly by @Itachi-1824 (Pollinations AI platform)",
+    "api_base": "https://gen.pollinations.ai",
+    "verified_live": "2026-06-23",
+    "auth": "Bearer POLLINATIONS_BYOP_KEY",
+    "notes": "All model IDs verified against live https://gen.pollinations.ai/v1/models response"
+  },
+
+  "image": {
+    "endpoint": "POST https://gen.pollinations.ai/v1/images/generations",
+    "endpoint_simple": "GET https://image.pollinations.ai/prompt/{prompt}?model={model}&width=W&height=H&nologo=true",
+    "auth": "Authorization: Bearer POLLINATIONS_BYOP_KEY",
+    "tiers": [
+      {
+        "tier": 1,
+        "name": "Flux Schnell",
+        "polly_id": "flux",
+        "capacity_score": 550,
+        "cost_per_img": 0.0018,
+        "verified": true,
+        "notes": "Fast, BYOP-based. High capacity. Best for batch thumbnail generation."
+      },
+      {
+        "tier": 2,
+        "name": "Z-Image Turbo",
+        "polly_id": "zimage",
+        "capacity_score": 500,
+        "cost_per_img": 0.002,
+        "verified": true,
+        "notes": "Sub-second, photorealistic, bilingual. Strong daily quota."
+      },
+      {
+        "tier": 3,
+        "name": "GPT Image 1 Mini",
+        "polly_id": "gptimage",
+        "capacity_score": 100,
+        "cost_per_img": null,
+        "input_cost_per_m": 1.5,
+        "output_cost_per_m": 1.88,
+        "verified": true,
+        "notes": "GPT-based image model, token-priced. Supports edits."
+      },
+      {
+        "tier": 4,
+        "name": "FLUX.2 Klein 4B",
+        "polly_id": "klein",
+        "capacity_score": 100,
+        "cost_per_img": 0.01,
+        "verified": true,
+        "notes": "Compact FLUX variant. Supports image edits."
+      },
+      {
+        "tier": 5,
+        "name": "FLUX.1 Kontext",
+        "polly_id": "kontext",
+        "capacity_score": 25,
+        "cost_per_img": 0.04,
+        "verified": true,
+        "notes": "Supports image-to-image editing (input: text+image). Lower capacity."
+      },
+      {
+        "tier": 6,
+        "name": "Nova Canvas",
+        "polly_id": "nova-canvas",
+        "capacity_score": 25,
+        "cost_per_img": 0.04,
+        "verified": true,
+        "notes": "Amazon Nova Canvas via Pollinations. Enterprise-grade. Inpainting support."
+      },
+      {
+        "tier": 7,
+        "name": "GPT Image 1.5",
+        "polly_id": "gpt-image-2",
+        "capacity_score": 20,
+        "input_cost_per_m": 5.0,
+        "output_cost_per_m": 8.0,
+        "verified": true,
+        "notes": "Highest quality GPT image. Also available as 'gptimage-large'. Use for hero shots."
+      }
+    ]
+  },
+
+  "video": {
+    "endpoint": "POST https://gen.pollinations.ai/v1/images/generations",
+    "notes": "Video models use the same image endpoint but output_modalities=['video']. Response is URL, not base64.",
+    "tiers": [
+      {
+        "tier": 5,
+        "name": "LTX-2.3",
+        "polly_id": "ltx-2",
+        "capacity_score": 30,
+        "cost_per_sec": 0.005,
+        "verified": true,
+        "notes": "LIVE TESTED 2026-06-23: POST /v1/images/generations with model=ltx-2 returned b64_json + revised_prompt. Output is H.264 MP4 (ISOM/AVC1) base64-encoded. Successful. Use endpoint: gen.pollinations.ai/v1/images/generations, width/height in payload.",
+        "response_format": "b64_json (MP4 video, base64-encoded)",
+        "alternative_ids": ["wan", "wan-fast", "wan-pro", "seedance-2.0", "grok-video-pro", "nova-reel"]
+      }
+    ]
+  },
+
+  "audio_transcription": {
+    "endpoint": "POST https://gen.pollinations.ai/audio/{text}",
+    "notes": "Audio models for transcription (STT) and generation. Auth via BYOP key.",
+    "tiers": [
+      {
+        "tier": 1,
+        "name": "AssemblyAI Universal-2",
+        "polly_id": "universal-2",
+        "capacity_score": 1500,
+        "cost_per_sec": 0.00004,
+        "verified": true,
+        "modality": "speech-to-text"
+      },
+      {
+        "tier": 2,
+        "name": "Whisper Large V3",
+        "polly_id": "whisper",
+        "capacity_score": 500,
+        "cost_per_sec": 0.00004,
+        "verified": true,
+        "modality": "speech-to-text"
+      },
+      {
+        "tier": 3,
+        "name": "AssemblyAI Universal-3 Pro",
+        "polly_id": "universal-3-pro",
+        "capacity_score": 100,
+        "cost_per_sec": 0.00006,
+        "verified": true,
+        "modality": "speech-to-text"
+      },
+      {
+        "tier": 4,
+        "name": "ACE-Step 1.5 Turbo",
+        "polly_id": "acestep",
+        "capacity_score": 70,
+        "cost_per_sec": 0.0005,
+        "verified": true,
+        "modality": "audio-generation",
+        "notes": "Text → music/audio generation, not STT"
+      },
+      {
+        "tier": 5,
+        "name": "GPT Realtime 2",
+        "polly_id": "gpt-realtime-2",
+        "capacity_score": 25,
+        "input_cost_per_m": 4.0,
+        "output_cost_per_m": 0.4,
+        "verified": true,
+        "modality": "realtime-audio",
+        "endpoint_override": "wss or POST /v1/realtime",
+        "notes": "Realtime audio dialog. Different endpoint — /v1/realtime. Input: text+audio+image. Output: text+audio."
+      }
+    ]
+  },
+
+  "text": {
+    "endpoint": "POST https://gen.pollinations.ai/v1/chat/completions",
+    "format": "OpenAI-compatible (messages array)",
+    "auth": "Authorization: Bearer POLLINATIONS_BYOP_KEY",
+    "notes": "All text models verified live in /v1/models response. Use for LLM cascade.",
+    "tiers": [
+      {"tier": 1,  "name": "Qwen3Guard 8B",              "polly_id": "qwen-safety",       "capacity_score": 250000, "verified": true,  "notes": "Safety/guard model. Unlimited capacity. No token cost."},
+      {"tier": 2,  "name": "Nova Micro",                  "polly_id": "nova-fast",          "capacity_score": 6900,   "verified": true,  "notes": "Amazon Nova Micro, fast, low cost. Maps to nova-fast slug."},
+      {"tier": 3,  "name": "Mistral Small 3.2",           "polly_id": "mistral-small-3.2",  "capacity_score": 4500,   "verified": true},
+      {"tier": 4,  "name": "Meta Llama 4 Scout",          "polly_id": "llama-scout",        "capacity_score": 3400,   "verified": true},
+      {"tier": 5,  "name": "Mistral Small 4",             "polly_id": "mistral",            "capacity_score": 2800,   "verified": true,  "notes": "Auto-upgrades to latest Mistral Small"},
+      {"tier": 6,  "name": "Qwen3 Coder 30B",             "polly_id": "qwen-coder",         "capacity_score": 2200,   "verified": true},
+      {"tier": 7,  "name": "Gemma 4 26B A4B",             "polly_id": "gemma",              "capacity_score": 2100,   "verified": true},
+      {"tier": 8,  "name": "GPT-5.4 Nano",                "polly_id": "openai-fast",        "capacity_score": 1800,   "verified": true,  "notes": "Maps to openai-fast (fastest OpenAI slug)"},
+      {"tier": 9,  "name": "Qwen3 VL 30B A3B Instruct",  "polly_id": "qwen-vision",        "capacity_score": 1600,   "verified": true,  "notes": "Vision-language, multimodal input"},
+      {"tier": 10, "name": "GPT-5 Nano",                  "polly_id": "openai",             "capacity_score": 1300,   "verified": true,  "notes": "Stable openai slug, auto-upgrades"},
+      {"tier": 11, "name": "Meta Llama 3.3 70B",          "polly_id": "llama",              "capacity_score": 1300,   "verified": true},
+      {"tier": 12, "name": "MiniMax M2.7",                "polly_id": "minimax-m2.7",       "capacity_score": 1200,   "verified": true},
+      {"tier": 13, "name": "DeepSeek V4 Flash (Lite)",    "polly_id": "deepseek",           "capacity_score": 1100,   "verified": true},
+      {"tier": 14, "name": "StepFun Step 3.5 Flash",      "polly_id": "step-3.5-flash",     "capacity_score": 1100,   "verified": true},
+      {"tier": 15, "name": "Nova 2 Lite",                 "polly_id": "nova",               "capacity_score": 550,    "verified": true,  "notes": "Amazon Nova 2. Maps to nova slug."},
+      {"tier": 16, "name": "MIDIjourney",                 "polly_id": "midijourney",        "capacity_score": 500,    "verified": true,  "notes": "Music/MIDI generation (text→MIDI)"},
+      {"tier": 17, "name": "StepFun Step 3.7 Flash",      "polly_id": "step-flash",         "capacity_score": 450,    "verified": true,  "notes": "Maps to step-flash (latest StepFun Flash slug)"},
+      {"tier": 18, "name": "Grok 4.20 Non-Reasoning",     "polly_id": "grok",               "capacity_score": 250,    "verified": true},
+      {"tier": 19, "name": "Mistral Large 3",             "polly_id": "mistral-large",      "capacity_score": 250,    "verified": true},
+      {"tier": 20, "name": "GPT-5.4 Mini",                "polly_id": "gpt-5.4-mini",       "capacity_score": 200,    "verified": true},
+      {"tier": 21, "name": "Qwen3 VL 235B A22B Thinking", "polly_id": "qwen-vision-pro",    "capacity_score": 200,    "verified": true,  "notes": "Reasoning-capable vision-language model"},
+      {"tier": 22, "name": "GPT Audio Mini",              "polly_id": "openai-audio",       "capacity_score": 150,    "verified": true,  "notes": "Audio input+output capable via chat completions"},
+      {"tier": 23, "name": "Grok 4.3",                    "polly_id": "grok-large",         "capacity_score": 150,    "verified": true},
+      {"tier": 24, "name": "MiniMax M3",                  "polly_id": "minimax",            "capacity_score": 150,    "verified": true},
+      {"tier": 25, "name": "Grok 4.20 Reasoning",         "polly_id": "grok-4-20-reasoning","capacity_score": 100,    "verified": true},
+      {"tier": 26, "name": "Qwen3.7 Plus",                "polly_id": "qwen-large",         "capacity_score": 90,     "verified": true},
+      {"tier": 27, "name": "MIDIjourney Large",           "polly_id": "midijourney-large",  "capacity_score": 85,     "verified": true},
+      {"tier": 28, "name": "Perplexity Sonar Pro",        "polly_id": "perplexity",         "capacity_score": 85,     "verified": true,  "notes": "Web-grounded. No tools param."},
+      {"tier": 29, "name": "Perplexity Sonar Reasoning",  "polly_id": "perplexity-reasoning","capacity_score": 75,    "verified": true},
+      {"tier": 30, "name": "Moonshot Kimi K2.6",          "polly_id": "kimi",               "capacity_score": 70,     "verified": true},
+      {"tier": 31, "name": "Z.ai GLM-5.2",                "polly_id": "glm",                "capacity_score": 50,     "verified": true},
+      {"tier": 32, "name": "GPT-5.5",                     "polly_id": "openai-large",       "capacity_score": 45,     "verified": true,  "notes": "Auto-upgrades to latest GPT-5.5"},
+      {"tier": 33, "name": "DeepSeek V4 Pro",             "polly_id": "deepseek-pro",       "capacity_score": 45,     "verified": true},
+      {"tier": 34, "name": "Moonshot Kimi K2.7 Code",     "polly_id": "kimi-code",          "capacity_score": 40,     "verified": true},
+      {"tier": 35, "name": "GPT-5.4",                     "polly_id": "gpt-5.4",            "capacity_score": 25,     "verified": true}
+    ]
+  },
+
+  "embedding": {
+    "endpoint": "POST https://gen.pollinations.ai/v1/embeddings",
+    "format": "OpenAI-compatible",
+    "auth": "Authorization: Bearer POLLINATIONS_BYOP_KEY",
+    "tiers": [
+      {
+        "tier": 1,
+        "name": "Text Embedding 3 Small",
+        "polly_id": "openai-3-small",
+        "capacity_score": 200000,
+        "input_cost_per_m": 0.02,
+        "context_length": 8192,
+        "verified": true
+      },
+      {
+        "tier": 2,
+        "name": "Cohere Embed v4",
+        "polly_id": "cohere-embed-v4",
+        "capacity_score": 76900,
+        "input_cost_per_m": 0.09,
+        "context_length": 128000,
+        "verified": true
+      },
+      {
+        "tier": 3,
+        "name": "Text Embedding 3 Large",
+        "polly_id": "openai-3-large",
+        "capacity_score": 3600,
+        "input_cost_per_m": 0.13,
+        "context_length": 8192,
+        "verified": true
+      },
+      {
+        "tier": 4,
+        "name": "Qwen3 Embedding 8B",
+        "polly_id": "qwen3-embedding-8b",
+        "capacity_score": 250,
+        "input_cost_per_m": 0.1,
+        "context_length": 32768,
+        "verified": true
+      }
+    ]
+  },
+
+  "_also_available_on_pollinations": {
+    "extra_image": ["seedream5", "seedream", "seedream-pro", "ideogram-v4-turbo", "ideogram-v4-balanced", "ideogram-v4-quality", "nanobanana", "nanobanana-2", "nanobanana-pro", "grok-imagine", "grok-imagine-pro", "wan-image", "wan-image-pro", "qwen-image", "p-image", "p-image-edit"],
+    "extra_video": ["veo", "seedance-pro", "seedance-2.0", "wan", "wan-fast", "wan-pro", "wan-pro-1080p", "grok-video-pro", "nova-reel", "p-video-720p", "p-video-1080p"],
+    "extra_audio_tts": ["elevenlabs", "elevenflash", "eleven-multilingual-v2", "elevenmusic", "eleven-sfx", "qwen-tts", "qwen-tts-instruct", "stable-audio-2.5"],
+    "extra_text": ["claude-fast", "claude", "claude-opus-4.6", "claude-opus-4.7", "claude-large", "gemini-3-flash", "gemini", "gemini-flash-lite-3.1", "gemini-fast", "gemini-large", "llama-maverick", "perplexity-fast", "perplexity-deep", "qwen-coder-large", "openai-audio-large", "gemini-search", "gemini-search-fast", "gemini-search-large"],
+    "embedding": ["gemini-2"],
+    "special": ["polly"]
+  }
+}

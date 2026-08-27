@@ -1,0 +1,29 @@
+{
+  "modes": {
+    "sand": {
+      "label": "Kinetic Sand (12hr)",
+      "type": "single_long",
+      "path": "D:\\Automation\\n8n\\kinetic_sand_vault_1.mp4",
+      "speed": 1.5,
+      "description": "12-hour kinetic sand ASMR video, very slow movement"
+    },
+    "minecraft": {
+      "label": "Minecraft Gameplay",
+      "type": "cdn_download",
+      "cdn_base": "https://cdn.brainrot.mov/backgrounds/Minecraft_{n}.mp4",
+      "cdn_max_index": 50,
+      "local_cache_dir": "D:\\Automation\\AURA-V2\\resources\\backgrounds",
+      "speed": 1.25,
+      "description": "Minecraft gameplay clips downloaded from brainrot.mov CDN"
+    },
+    "pinterest": {
+      "label": "Pinterest Clips",
+      "type": "library",
+      "library_dir": "D:\\Automation\\n8n\\asmr-qa-vault\\public\\accepted_vault",
+      "speed": 2.0,
+      "smart_selection": true,
+      "description": "300 curated Pinterest short-form video clips, smart-selected by audio length"
+    }
+  },
+  "default_mode": "pinterest"
+}

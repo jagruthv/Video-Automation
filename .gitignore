@@ -1,0 +1,111 @@
+# ==============================================================================
+# AURA Unified Git Ignore Configuration
+# ==============================================================================
+
+# ── Secrets & Environment Variables ───────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+token.json
+client_secret*.json
+client_secrets*.json
+credentials.json
+
+# ── Node.js & Dependencies ───────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.next/
+out/
+build/
+dist/
+
+# ── Python & Virtual Environments ─────────────────────────────────────────────
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Databases & SQLite ────────────────────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/*.sqlite
+data/*.db
+AURA-V2/data/*.sqlite
+AURA-V3/data/*.db
+
+# ── Heavy Media & Video Files (Kept locally for rendering, excluded from Git) ─
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.wmv
+*.flv
+*.webm
+*.iso
+*.tar.gz
+*.zip
+*.7z
+n8n/kinetic_sand_vault_1.mp4
+n8n/asmr-qa-vault/public/raw_videos/*
+n8n/asmr-qa-vault/public/accepted_vault/*
+n8n/asmr-qa-vault/public/trash_bin/*
+AURA-V2/resources/backgrounds/*.mp4
+AURA-V2/assets/minecraft_cache/*
+Vaults/Satisfying_Clips/*
+
+# Keep placeholder .gitkeep files in asset folders
+!**/backgrounds/.gitkeep
+!**/minecraft_cache/.gitkeep
+!**/Satisfying_Clips/.gitkeep
+!**/accepted_vault/.gitkeep
+!**/raw_videos/.gitkeep
+
+# ── Heavy Executables & Tool Binaries ─────────────────────────────────────────
+*.exe
+*.dll
+*.bin
+n8n/ffmpeg.exe
+n8n/yt-dlp.exe
+
+# ── Runtime Output, Caches, Logs ──────────────────────────────────────────────
+output/*
+!output/.gitkeep
+AURA-V3/output/*
+!AURA-V3/output/.gitkeep
+tmp/*
+!tmp/.gitkeep
+AURA-V2/tmp/*
+!AURA-V2/tmp/.gitkeep
+AURA-V3/tmp/*
+!AURA-V3/tmp/.gitkeep
+logs/*
+!logs/.gitkeep
+AURA-V3/logs/*
+!AURA-V3/logs/.gitkeep
+*.log
+yt-dlp-log.txt
+crash.log
+
+# ── IDE & OS Files ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

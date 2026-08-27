@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURA V2 | Control Center</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; margin: 0; padding: 2rem; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 1rem; margin-bottom: 2rem; }
+        .header h1 { margin: 0; color: #38bdf8; font-weight: 800; letter-spacing: 1px; }
+        .controls { display: flex; gap: 1rem; margin-bottom: 2rem; }
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        .btn-primary { background-color: #3b82f6; color: white; }
+        .btn-primary:hover { background-color: #2563eb; }
+        .btn-danger { background-color: #ef4444; color: white; }
+        .btn-danger:hover { background-color: #dc2626; }
+        .queue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
+        .video-card { background: #1e293b; border-radius: 8px; padding: 1rem; border: 1px solid #334155; }
+        .status-box { background: #020617; padding: 1rem; border-radius: 6px; margin-bottom: 2rem; font-family: monospace; color: #10b981; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>AURA V2.0</h1>
+        <div class="stats">Queue: <span id="queue-count">0</span> | Daily API Limits: SAFE</div>
+    </div>
+
+    <div class="controls">
+        <button class="btn btn-primary" onclick="triggerBuild('single')">▶ Generate Single Video</button>
+        <button class="btn btn-danger" onclick="triggerBuild('infinite')">♾️ Start Infinite Factory Mode</button>
+    </div>
+
+    <div class="status-box" id="terminal-output">
+        System Ready. Awaiting commands...
+    </div>
+
+    <h2>Approval Queue</h2>
+    <div class="queue-grid" id="queue-grid">
+        <div class="video-card">
+            <p style="color: #94a3b8; text-align: center; margin: 2rem 0;">No pending videos.</p>
+        </div>
+    </div>
+
+    <script>
+        function triggerBuild(mode) {
+            const terminal = document.getElementById('terminal-output');
+            terminal.innerText = `[${new Date().toLocaleTimeString()}] Triggering ${mode} build sequence...`;
+            
+            // This will soon connect to our backend API
+            fetch(`/api/build?mode=${mode}`, { method: 'POST' })
+                .then(res => res.json())
+                .then(data => {
+                    terminal.innerText += `\n[${new Date().toLocaleTimeString()}] ${data.message}`;
+                });
+        }
+    </script>
+</body>
+</html>
