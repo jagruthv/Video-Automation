@@ -37,8 +37,12 @@ MAP_COUNTRY_ZOOM      = 4     # zoom level for country overview tile
 MAP_CITY_ZOOM         = 12    # zoom level for city-level tile
 
 # Font assets (used by ui_forge + map_forge fallback)
-UI_FONT_PATH          = BASE_DIR / "assets" / "fonts" / "SFProDisplay-Regular.ttf"
-UI_FONT_BOLD_PATH     = BASE_DIR / "assets" / "fonts" / "SFProDisplay-Bold.ttf"
+# If SFPro TTFs not installed, system fonts (Segoe UI / Arial) are used automatically
+_FONTS_DIR        = BASE_DIR / "assets" / "fonts"
+_SEGOE            = Path("C:/Windows/Fonts/segoeui.ttf")
+_SEGOE_BOLD       = Path("C:/Windows/Fonts/segoeuib.ttf")
+UI_FONT_PATH      = _FONTS_DIR / "SFProDisplay-Regular.ttf" if (_FONTS_DIR / "SFProDisplay-Regular.ttf").exists() else (_SEGOE if _SEGOE.exists() else _FONTS_DIR / "SFProDisplay-Regular.ttf")
+UI_FONT_BOLD_PATH = _FONTS_DIR / "SFProDisplay-Bold.ttf" if (_FONTS_DIR / "SFProDisplay-Bold.ttf").exists() else (_SEGOE_BOLD if _SEGOE_BOLD.exists() else _FONTS_DIR / "SFProDisplay-Bold.ttf")
 
 # FFmpeg codec defaults shared by all forges
 VIDEO_CODEC           = "libx264"
@@ -74,7 +78,9 @@ CAPTION_Y_POSITION       = int(1920 * 0.74)   # = 1420px — slightly lower (was
 CAPTION_BORDER_W         = 6      # thicker stroke for more contrast (was 5)
 
 # ── FFmpeg ───────────────────────────────────────────────────────────────
-FFMPEG_PATH   = os.getenv("FFMPEG_PATH", "ffmpeg")
+# Prefer local binary; fall back to system ffmpeg if not present
+_LOCAL_FFMPEG = Path(r"D:\Automation\n8n\ffmpeg.exe")
+FFMPEG_PATH   = os.getenv("FFMPEG_PATH", str(_LOCAL_FFMPEG) if _LOCAL_FFMPEG.exists() else "ffmpeg")
 OUTPUT_WIDTH  = 1080
 OUTPUT_HEIGHT = 1920
 OUTPUT_FPS    = 30
@@ -87,6 +93,7 @@ TARGET_DURATION_MAX =  55 # 0:55 in seconds (hard ceiling — must stay under 1 
 
 # ── Logging ────────────────────────────────────────────────────────────────
 LOG_LEVEL = "INFO"   # DEBUG | INFO | WARNING | ERROR
+LOG_DIR   = BASE_DIR / "logs"
 
 # ── Ensure dirs exist on import ────────────────────────────────────────────
 _dirs_to_create = [
