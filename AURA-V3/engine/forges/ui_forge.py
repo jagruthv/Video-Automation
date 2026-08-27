@@ -43,13 +43,23 @@ _PANEL_STROKE= (60, 60, 80)
 # ─────────────────────────────────────────────
 
 def _font(path: Path, size: int):
-    """Load TTF font; fall back to Pillow's built-in if TTF is missing."""
+    """Load TTF font; fall back to system fonts (Segoe UI / Arial) or Pillow default."""
     from PIL import ImageFont
-    try:
-        return ImageFont.truetype(str(path), size)
-    except Exception:
-        logger.warning(f"[UI] Font not found at {path}. Using Pillow default.")
-        return ImageFont.load_default()
+    if path and Path(path).exists():
+        try:
+            return ImageFont.truetype(str(path), size)
+        except Exception:
+            pass
+    # Windows system font fallbacks
+    for sys_font in ["C:/Windows/Fonts/segoeuib.ttf" if "bold" in str(path).lower() else "C:/Windows/Fonts/segoeui.ttf",
+                     "C:/Windows/Fonts/arialbd.ttf" if "bold" in str(path).lower() else "C:/Windows/Fonts/arial.ttf"]:
+        try:
+            if Path(sys_font).exists():
+                return ImageFont.truetype(sys_font, size)
+        except Exception:
+            continue
+    logger.warning(f"[UI] Font not found at {path}. Using Pillow default.")
+    return ImageFont.load_default()
 
 
 # ─────────────────────────────────────────────
